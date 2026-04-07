@@ -1,155 +1,151 @@
 import asyncio
 import json
-
 import aiohttp
 
 
 class LLM:
-    """
-    Client for an already-running LLM server.
-    If no server is running, terminate immediately.
-    """
+    def __init__(self, host="127.0.0.1", port=8080):
+        self.base_url = f"http://{host}:{port}"
+        self.session = None
 
-    def __init__(
-        self,
-        model: str = "8b",
-        host: str = "127.0.0.1",
-        port: int = 8080,
-    ) -> None:
-        self.model = model
-        self.host = host
-        self.port = port
-        self.base_url = f"http://{self.host}:{self.port}"
-        self.session: aiohttp.ClientSession | None = None
-
-    async def _get_session(self) -> aiohttp.ClientSession:
-        if self.session is None or self.session.closed:
-            self.session = aiohttp.ClientSession()
-        return self.session
-
-    async def start(self) -> None:
-        if not await self._is_server_ready():
-            raise SystemExit(f"No running LLM server found at {self.base_url}")
-        print(f"Using running server at {self.base_url}")
-
-    async def _is_server_ready(self) -> bool:
-        session = await self._get_session()
-
+    async def start(self):
+        self.session = aiohttp.ClientSession()
         for path in ("/health", "/v1/models", "/models"):
             try:
-                async with session.get(
+                async with self.session.get(
                     f"{self.base_url}{path}",
                     timeout=aiohttp.ClientTimeout(total=2),
-                ) as resp:
-                    if resp.status < 500:
-                        return True
+                ) as r:
+                    if r.status < 500:
+                        return
             except Exception:
                 pass
+        await self.session.close()
+        raise SystemExit(f"No running LLM server found at {self.base_url}")
 
-        return False
+    def _flatten(self, value):
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value
+        if isinstance(value, list):
+            parts = []
+            for item in value:
+                if isinstance(item, str):
+                    parts.append(item)
+                elif isinstance(item, dict):
+                    text = item.get("text") or item.get("content") or item.get("value") or ""
+                    if text:
+                        parts.append(text)
+            return "".join(parts)
+        if isinstance(value, dict):
+            return value.get("text") or value.get("content") or value.get("value") or ""
+        return str(value)
 
-    async def ask(self, prompt: str, system_prompt: str | None = None) -> str:
-        session = await self._get_session()
+    def _extract_stream_parts(self, payload):
+        """
+        Return (thinking_text, answer_text, finish_reason).
 
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
+        Streaming-only extraction from delta fields to avoid duplicating
+        the final answer when some servers also include message/content.
+        """
+        try:
+            choice = payload["choices"][0]
+        except Exception:
+            return "", "", None
 
-        payload = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": 0.8,
-            "top_k": 20,
-            "top_p": 0.95,
-            "min_p": 0.0,
-            "n_predict": 512,
-            "stream": True,
-        }
+        delta = choice.get("delta") or {}
+        finish_reason = choice.get("finish_reason")
 
-        url = f"{self.base_url}/v1/chat/completions"
-        parts: list[str] = []
+        thinking = (
+            self._flatten(delta.get("reasoning_content"))
+            or self._flatten(delta.get("reasoning"))
+            or self._flatten(delta.get("thinking"))
+            or self._flatten(delta.get("thought"))
+        )
 
-        async with session.post(
-            url,
-            json=payload,
+        answer = self._flatten(delta.get("content"))
+
+        return thinking, answer, finish_reason
+
+    async def ask(self, prompt):
+        async with self.session.post(
+            f"{self.base_url}/v1/chat/completions",
+            json={
+                "messages": [{"role": "user", "content": prompt}],
+                "stream": True,
+            },
             timeout=aiohttp.ClientTimeout(total=600),
-        ) as resp:
-            if resp.status >= 400:
-                err_text = await resp.text()
-                raise RuntimeError(f"Request failed with HTTP {resp.status}: {err_text}")
+        ) as r:
+            if r.status >= 400:
+                raise RuntimeError(await r.text())
 
-            async for raw_line in resp.content:
-                line = raw_line.decode("utf-8", errors="ignore").strip()
-                if not line or not line.startswith("data:"):
+            thinking_parts = []
+            answer_parts = []
+
+            thinking_started = False
+            answer_started = False
+
+            async for raw in r.content:
+                line = raw.decode(errors="ignore").strip()
+                if not line.startswith("data:"):
                     continue
 
-                data_str = line[5:].strip()
-                if data_str == "[DONE]":
+                data = line[5:].strip()
+                if data == "[DONE]":
                     break
 
                 try:
-                    data = json.loads(data_str)
-                except json.JSONDecodeError:
+                    payload = json.loads(data)
+                except Exception:
                     continue
 
-                token = self._extract_stream_text(data)
-                if not token:
-                    continue
+                thinking, answer, finish_reason = self._extract_stream_parts(payload)
 
-                print(token, end="", flush=True)
-                parts.append(token)
+                if thinking:
+                    if not thinking_started:
+                        if answer_started:
+                            print()
+                        print("=== THINKING ===")
+                        thinking_started = True
+                    print(thinking, end="", flush=True)
+                    thinking_parts.append(thinking)
 
-        return "".join(parts)
+                if answer:
+                    if not answer_started:
+                        if thinking_started:
+                            print("\n\n=== ANSWER ===")
+                        else:
+                            print("=== ANSWER ===")
+                        answer_started = True
+                    print(answer, end="", flush=True)
+                    answer_parts.append(answer)
 
-    @staticmethod
-    def _extract_stream_text(data: dict) -> str:
-        try:
-            choice = data["choices"][0]
-        except (KeyError, IndexError, TypeError):
-            return ""
+                if finish_reason is not None:
+                    break
 
-        delta = choice.get("delta") or {}
-        if isinstance(delta, dict):
-            content = delta.get("content")
-            if isinstance(content, str):
-                return content
+            if thinking_started or answer_started:
+                print()
 
-        message = choice.get("message") or {}
-        if isinstance(message, dict):
-            content = message.get("content")
-            if isinstance(content, str):
-                return content
+            return {
+                "thinking": "".join(thinking_parts),
+                "answer": "".join(answer_parts),
+            }
 
-        text = choice.get("text")
-        if isinstance(text, str):
-            return text
-
-        return ""
-
-    async def close(self) -> None:
-        if self.session is not None and not self.session.closed:
+    async def close(self):
+        if self.session:
             await self.session.close()
-            self.session = None
 
 
-async def main() -> None:
-    llm = LLM(
-        model="8b",
-        host="127.0.0.1",
-        port=8080,
-    )
-
+async def main():
+    llm = LLM()
     try:
         await llm.start()
-
-        print("\n=== RESPONSE ===\n")
-        text = await llm.ask(
-            "Write a one paragraph summary of tool calling for local LLMs."
-        )
-
-        print("\n\n=== FINAL TEXT ===\n")
-        print(text)
+        result = await llm.ask("Hello LLM")
+        #
+        # print("\n--- structured result ---")
+        # print("thinking:", repr(result["thinking"]))
+        # print("answer:", repr(result["answer"]))
     finally:
         await llm.close()
 

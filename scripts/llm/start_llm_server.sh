@@ -10,7 +10,7 @@ SERVER_SCRIPT="${SERVER_SCRIPT:-$ROOT_DIR/src/LLMServer.py}"
 PID_FILE="${PID_FILE:-$CACHE_DIR/.llmserver.pid}"
 LOG_FILE="${LOG_FILE:-$CACHE_DIR/.llmserver.log}"
 
-MODEL="${MODEL:-8b}"
+MODEL="${MODEL:-1.7b}"
 HOST="${HOST:-127.0.0.1}"
 PORT="${PORT:-8080}"
 
