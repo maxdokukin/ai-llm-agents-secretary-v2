@@ -23,8 +23,11 @@ class ToolManager:
             if py_file.name == "__init__.py":
                 continue
 
+            # Auto-infer name: e.g., toolbox/math/add.py -> math_add
             rel_path = py_file.relative_to(self.toolbox_dir)
-            module_name = f"toolbox_{rel_path.stem}"
+            inferred_name = "_".join(rel_path.with_suffix('').parts)
+
+            module_name = f"toolbox_{inferred_name}"
 
             # Dynamically load the module
             spec = importlib.util.spec_from_file_location(module_name, py_file)
@@ -36,11 +39,15 @@ class ToolManager:
                 # Enforce the contract: must have 'tool_schema' and 'execute'
                 if hasattr(module, 'tool_schema') and hasattr(module, 'execute'):
                     schema = module.tool_schema
-                    tool_name = schema['function']['name']
+
+                    # Ensure the function dictionary exists, then inject the inferred name
+                    if "function" not in schema:
+                        schema["function"] = {}
+                    schema["function"]["name"] = inferred_name
 
                     self.schemas.append(schema)
-                    self.tools[tool_name] = module.execute
-                    print(f"Registered tool: {tool_name} (from {rel_path})")
+                    self.tools[inferred_name] = module.execute
+                    print(f"Registered tool: {inferred_name} (from {rel_path})")
                 else:
                     print(f"Skipping {rel_path}: Missing 'tool_schema' or 'execute()'.")
             except Exception as e:
@@ -59,7 +66,8 @@ class ToolManager:
 
         try:
             # Parse the JSON string arguments provided by the LLM
-            args = json.loads(arguments_json)
+            # Fallback to empty dict if LLM passes empty string
+            args = json.loads(arguments_json) if arguments_json else {}
 
             # Execute the mapped function
             result = self.tools[tool_name](**args)

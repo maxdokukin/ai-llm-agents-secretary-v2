@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 tool_schema = {
     "type": "function",
     "function": {
-        "name": "data_db_select_educations",
         "description": "Fetches education records from the Supabase database.",
         "parameters": {
             "type": "object",
@@ -34,11 +33,9 @@ def execute(limit: int = 10) -> str:
 
         supabase: Client = create_client(url, key)
 
-        # Execute the query with the optional limit
         response = supabase.table('educations').select("*").limit(limit).execute()
         educations = response.data
 
-        # Return the data as a JSON string for the LLM to process
         return json.dumps(educations)
 
     except Exception as e:

@@ -1,7 +1,6 @@
 tool_schema = {
     "type": "function",
     "function": {
-        "name": "math_power",
         "description": "Calculates the result of a base number raised to an exponent.",
         "parameters": {
             "type": "object",
