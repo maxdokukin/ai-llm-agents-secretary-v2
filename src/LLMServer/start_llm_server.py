@@ -201,7 +201,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Resolve/download an allowed ggml-org Gemma 4 model in the foreground, then start llama-server in the background."
     )
-    parser.add_argument("--model", type=str, default=os.environ.get("MODEL", "e2b"))
+    parser.add_argument("--model", type=str, default=os.environ.get("MODEL", "e4b"))
     parser.add_argument("--parameters", type=str, default=os.environ.get("PARAMETERS", ""))
     parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8080")))
     parser.add_argument(
