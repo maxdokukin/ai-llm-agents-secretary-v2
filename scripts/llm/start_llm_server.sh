@@ -10,8 +10,9 @@ SERVER_SCRIPT="${SERVER_SCRIPT:-$ROOT_DIR/src/LLMServer.py}"
 PID_FILE="${PID_FILE:-$CACHE_DIR/.llmserver.pid}"
 LOG_FILE="${LOG_FILE:-$CACHE_DIR/.llmserver.log}"
 
+# Updated variables to match the LLMServer.py arguments
 MODEL="${MODEL:-1.7b}"
-HOST="${HOST:-127.0.0.1}"
+PARAMETERS="${PARAMETERS:-}"
 PORT="${PORT:-8080}"
 
 mkdir -p "$CACHE_DIR"
@@ -27,7 +28,6 @@ if [ -f "$PID_FILE" ]; then
     OLD_PID="$(cat "$PID_FILE" 2>/dev/null || true)"
     if [ -n "${OLD_PID:-}" ] && kill -0 "$OLD_PID" 2>/dev/null; then
         echo "LLMServer already running with PID $OLD_PID"
-        echo "Host: $HOST"
         echo "Port: $PORT"
         echo "Cache: $CACHE_DIR"
         exit 0
@@ -47,17 +47,18 @@ if [ ! -f "$SERVER_SCRIPT" ]; then
 fi
 
 echo "Starting LLMServer..."
-echo "Python: $PYTHON_BIN"
-echo "Script: $SERVER_SCRIPT"
-echo "Model : $MODEL"
-echo "Host  : $HOST"
-echo "Port  : $PORT"
-echo "Log   : $LOG_FILE"
-echo "Cache : $CACHE_DIR"
+echo "Python     : $PYTHON_BIN"
+echo "Script     : $SERVER_SCRIPT"
+echo "Model      : $MODEL"
+echo "Parameters : $PARAMETERS"
+echo "Port       : $PORT"
+echo "Log        : $LOG_FILE"
+echo "Cache      : $CACHE_DIR"
 
+# Updated nohup command passing only the arguments handled by LLMServer.py
 nohup "$PYTHON_BIN" "$SERVER_SCRIPT" \
     --model "$MODEL" \
-    --host "$HOST" \
+    --parameters "$PARAMETERS" \
     --port "$PORT" \
     >> "$LOG_FILE" 2>&1 &
 

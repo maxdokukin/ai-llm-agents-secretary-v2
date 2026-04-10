@@ -1,1 +1,1 @@
-sudo sysctl iogpu.wired_limit_mb=21000
+sudo sysctl iogpu.wired_limit_mb=20480
