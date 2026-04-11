@@ -1,74 +1,118 @@
 import sys
+import uuid
 from openai import OpenAI
 from src.ToolManager.ToolManager import ToolManager
 
-# 1. Initialize Tool Manager
+# 1. Initialize Tool Manager and OpenAI Client
 manager = ToolManager()
-
-# 2. Setup OpenAI Client pointing to local llama.cpp server
 client = OpenAI(base_url="http://localhost:8080/v1", api_key="sk-local")
 
+# 2. Maintain Conversation History
 messages = [
     {"role": "user", "content": "compare data you have in all tables you have db access to"}
 ]
 
-print("Model: ", end="", flush=True)
+print("Starting Agent Loop...\n")
 
-# 3. Request completion with tools and stream=True
-response = client.chat.completions.create(
-    model="local-model",
-    messages=messages,
-    tools=manager.get_schemas(),
-    tool_choice="auto",
-    stream=True
-)
+# 3. The Continuous Agent Loop
+while True:
+    print("\n[Model Responding...] ", end="", flush=True)
 
-# Accumulator dictionaries for the stream
-assembled_tool_calls = {}
+    import json
 
-# 4. Iterate through the stream chunks
-for chunk in response:
-    delta = chunk.choices[0].delta
+    # 1. Prepare your request arguments
+    request_payload = {
+        "model": "local-model",
+        "messages": messages,
+        "tools": manager.get_schemas(),
+        "tool_choice": "auto",
+        "stream": True
+    }
 
-    # A. Stream Content/Reasoning directly to the console
-    # (If your model uses <think> tags, they will stream out here naturally)
-    if delta.content:
-        sys.stdout.write(delta.content)
-        sys.stdout.flush()
+    # 2. Print the raw JSON payload
+    print("--- RAW REQUEST PAYLOAD ---")
+    print(json.dumps(request_payload, indent=2))
+    print("---------------------------\n")
 
-    # (Optional safeguard): Check if server uses separate reasoning field (e.g., DeepSeek R1 setups)
-    if hasattr(delta, 'reasoning_content') and delta.reasoning_content:
-        sys.stdout.write(delta.reasoning_content)
-        sys.stdout.flush()
+    # 3. Send the request
+    response = client.chat.completions.create(**request_payload)
 
-    # B. Accumulate fragmented Tool Calls
-    if delta.tool_calls:
-        for tc_chunk in delta.tool_calls:
-            # Tools stream with an index to keep track of multiple parallel calls
-            idx = tc_chunk.index
+    # Accumulators for this specific turn
+    turn_content = ""
+    assembled_tool_calls = {}
 
-            # Initialize the dictionary for this index if we haven't seen it yet
-            if idx not in assembled_tool_calls:
-                assembled_tool_calls[idx] = {"name": "", "arguments": ""}
+    # 4. Stream and Accumulate
+    for chunk in response:
+        # Check if choices array exists and is not empty (sometimes the final chunk is empty)
+        if not chunk.choices:
+            continue
 
-            # Append the name chunks
-            if tc_chunk.function.name:
-                assembled_tool_calls[idx]["name"] += tc_chunk.function.name
+        delta = chunk.choices[0].delta
 
-            # Append the JSON argument chunks
-            if tc_chunk.function.arguments:
-                assembled_tool_calls[idx]["arguments"] += tc_chunk.function.arguments
+        # A. Stream Reasoning Tokens (If model uses a dedicated reasoning field)
+        if hasattr(delta, 'reasoning_content') and delta.reasoning_content is not None:
+            sys.stdout.write(delta.reasoning_content)
+            sys.stdout.flush()
 
-print("\n")  # Clean line break after the stream finishes
+        # B. Stream Standard Content (The actual answer, or embedded <think> tags)
+        if hasattr(delta, 'content') and delta.content is not None:
+            sys.stdout.write(delta.content)
+            sys.stdout.flush()
+            turn_content += delta.content
 
-# 5. Handle the Assembled Tool Calls
-if assembled_tool_calls:
-    print("--- Executing Tools ---")
-    for idx, tool_call in assembled_tool_calls.items():
-        tool_name = tool_call["name"]
-        tool_args = tool_call["arguments"]
+        # C. Accumulate Fragmented Tool Calls
+        if hasattr(delta, 'tool_calls') and delta.tool_calls:
+            for tc_chunk in delta.tool_calls:
+                idx = tc_chunk.index
 
-        print(f"Executing: {tool_name}")
+                # Initialize with an ID (llama.cpp sometimes misses streaming the ID, so we generate a fallback)
+                if idx not in assembled_tool_calls:
+                    tc_id = tc_chunk.id if tc_chunk.id else f"call_{uuid.uuid4().hex[:8]}"
+                    assembled_tool_calls[idx] = {"id": tc_id, "name": "", "arguments": ""}
+
+                if tc_chunk.function.name:
+                    assembled_tool_calls[idx]["name"] += tc_chunk.function.name
+
+                if tc_chunk.function.arguments:
+                    assembled_tool_calls[idx]["arguments"] += tc_chunk.function.arguments
+
+    print()  # Line break after stream finishes
+
+    # 5. Format the Assistant's Message for History
+    assistant_message = {
+        "role": "assistant",
+        "content": turn_content if turn_content else None
+    }
+
+    if not assembled_tool_calls:
+        # Loop Exit Condition: The model didn't call any tools. It is done.
+        messages.append(assistant_message)
+        print("\n[Agent Finished]")
+        break
+
+    # If tools were called, attach them to the assistant message
+    formatted_tool_calls = []
+    for idx, tc in assembled_tool_calls.items():
+        formatted_tool_calls.append({
+            "id": tc["id"],
+            "type": "function",
+            "function": {
+                "name": tc["name"],
+                "arguments": tc["arguments"]
+            }
+        })
+
+    assistant_message["tool_calls"] = formatted_tool_calls
+    messages.append(assistant_message)
+
+    # 6. Execute Tools and Append Results to History
+    print("\n--- Executing Tools ---")
+    for tc in formatted_tool_calls:
+        tool_name = tc["function"]["name"]
+        tool_args = tc["function"]["arguments"]
+        tool_id = tc["id"]
+
+        print(f"-> Running: {tool_name}")
 
         # Execute dynamically
         result = manager.execute_tool(
@@ -76,4 +120,15 @@ if assembled_tool_calls:
             arguments_json=tool_args
         )
 
-        print(f"Tool Result: {result}\n")
+        # Truncate print output if it's massive, just to keep the terminal clean
+        print(f"-> Result snippet: {result[:100]}...\n")
+
+        # Append the tool's result to the conversation history
+        messages.append({
+            "role": "tool",
+            "tool_call_id": tool_id,
+            "content": result
+        })
+
+    # After appending the tool results, the 'while True' loop restarts,
+    # sending the updated history back to the model!
