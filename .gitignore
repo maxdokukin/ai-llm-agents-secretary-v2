@@ -5,3 +5,4 @@
 /scripts/llm/cache/
 /src/llm/
 /llm/
+__pycache__/
