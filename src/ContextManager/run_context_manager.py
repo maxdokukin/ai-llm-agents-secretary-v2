@@ -39,7 +39,8 @@ session_usage: Dict[str, Dict[str, int]] = {
         "results": 0,
         "index": 0,
         "data": 0,
-        "history": 0,
+        "user": 0,
+        "assistant": 0,
     }
 }
 
@@ -51,8 +52,28 @@ def empty_usage() -> Dict[str, int]:
         "results": 0,
         "index": 0,
         "data": 0,
-        "history": 0,
+        "user": 0,
+        "assistant": 0,
     }
+
+
+def normalize_usage_counts(counts: Optional[Dict[str, int]]) -> Dict[str, int]:
+    normalized = empty_usage()
+
+    if not counts:
+        return normalized
+
+    for key in normalized.keys():
+        value = counts.get(key, 0)
+        if isinstance(value, (int, float)):
+            normalized[key] = max(0, int(value))
+
+    # Backward compatibility for any in-memory sessions that still have "history".
+    legacy_history = counts.get("history", 0)
+    if isinstance(legacy_history, (int, float)) and legacy_history > 0:
+        normalized["assistant"] += int(legacy_history)
+
+    return normalized
 
 
 def get_cm(session_id: str) -> ContextManager:
@@ -61,6 +82,8 @@ def get_cm(session_id: str) -> ContextManager:
 
     if session_id not in session_usage:
         session_usage[session_id] = empty_usage()
+    else:
+        session_usage[session_id] = normalize_usage_counts(session_usage[session_id])
 
     return sessions[session_id]
 
@@ -68,6 +91,8 @@ def get_cm(session_id: str) -> ContextManager:
 def add_usage(session_id: str, category: str, amount: int) -> None:
     if session_id not in session_usage:
         session_usage[session_id] = empty_usage()
+    else:
+        session_usage[session_id] = normalize_usage_counts(session_usage[session_id])
 
     if category not in session_usage[session_id]:
         session_usage[session_id][category] = 0
@@ -98,6 +123,12 @@ def classify_message(msg: dict) -> str:
     if role == "tool":
         return "results"
 
+    if role == "user":
+        return "user"
+
+    if role == "assistant":
+        return "assistant"
+
     if role == "system":
         if "tool schema" in marker or '"parameters"' in marker or '"function"' in marker:
             return "tools"
@@ -119,7 +150,7 @@ def classify_message(msg: dict) -> str:
     if "fetched_data" in marker or "fetched data" in marker or "retrieved data" in marker:
         return "data"
 
-    return "history"
+    return "assistant"
 
 
 def estimate_usage_from_messages(messages: List[dict]) -> Dict[str, int]:
@@ -152,7 +183,7 @@ def calculate_usage(session_id: str) -> dict:
 
     stats_used = get_stat_value(stats, ["used", "usage", "consumed"], 0)
 
-    tracked_counts = session_usage.get(session_id, empty_usage()).copy()
+    tracked_counts = normalize_usage_counts(session_usage.get(session_id, empty_usage()))
     tracked_total = sum(tracked_counts.values())
 
     # If the sidecar ledger has no data, fall back to classifying assembled messages.
@@ -162,11 +193,11 @@ def calculate_usage(session_id: str) -> dict:
 
     # Preserve compatibility with ContextManager's own accounting.
     # If calculate_free_space() reports more used chars than the category ledger,
-    # put the difference into history so the visual bar still fills correctly.
+    # put the difference into assistant so the visual bar still fills correctly.
     effective_used = max(stats_used, tracked_total)
 
     if effective_used > tracked_total:
-        tracked_counts["history"] += effective_used - tracked_total
+        tracked_counts["assistant"] += effective_used - tracked_total
         tracked_total = effective_used
 
     free = max(0, max_context - tracked_total)
@@ -276,7 +307,13 @@ async def add_tool(payload: ToolPayload):
 @app.post("/api/context/message")
 async def add_message(payload: MessagePayload):
     entry_id = get_cm(payload.session_id).add_message(payload.role, payload.content)
-    add_usage(payload.session_id, "history", len(payload.content))
+
+    usage_category = classify_message({
+        "role": payload.role,
+        "content": payload.content,
+    })
+
+    add_usage(payload.session_id, usage_category, len(payload.content))
     return {"status": "success", "id": entry_id}
 
 

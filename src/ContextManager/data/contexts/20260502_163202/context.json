@@ -1,0 +1,271 @@
+{
+    "master_prompt": [
+        {
+            "id": "e7f5b161-bba5-46af-bafa-5bb61db4eb11",
+            "timestamp": 1777764722.093566,
+            "content": "You are a capable AI secretary. Use tools to satisfy requests.",
+            "associated_id": null
+        }
+    ],
+    "tools": [
+        {
+            "id": "001431aa-6dbc-4a01-a3e0-3f5533b5de21",
+            "timestamp": 1777764722.094549,
+            "content": {
+                "type": "function",
+                "function": {
+                    "description": "Adds two numbers together.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "a": {
+                                "type": "number",
+                                "description": "The first number."
+                            },
+                            "b": {
+                                "type": "number",
+                                "description": "The second number."
+                            }
+                        },
+                        "required": [
+                            "a",
+                            "b"
+                        ]
+                    },
+                    "name": "math_add"
+                }
+            },
+            "associated_id": null
+        },
+        {
+            "id": "481e4aa2-489c-4b6c-874f-f8159e5eeab5",
+            "timestamp": 1777764722.095289,
+            "content": {
+                "type": "function",
+                "function": {
+                    "description": "Calculates the result of a base number raised to an exponent.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "base": {
+                                "type": "number",
+                                "description": "The base number."
+                            },
+                            "exponent": {
+                                "type": "number",
+                                "description": "The power to raise the base to."
+                            }
+                        },
+                        "required": [
+                            "base",
+                            "exponent"
+                        ]
+                    },
+                    "name": "math_power"
+                }
+            },
+            "associated_id": null
+        },
+        {
+            "id": "7be6f9ef-1d71-4ba3-99ce-baafd940abdf",
+            "timestamp": 1777764722.096034,
+            "content": {
+                "type": "function",
+                "function": {
+                    "description": "Executes allowed shell commands (ls, cd, pwd) on the local system and returns the standard output.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "command": {
+                                "type": "string",
+                                "description": "The command to execute. Only 'ls', 'cd', and 'pwd' are permitted."
+                            }
+                        },
+                        "required": [
+                            "command"
+                        ]
+                    },
+                    "name": "sh_run_script"
+                }
+            },
+            "associated_id": null
+        },
+        {
+            "id": "ed173238-cd49-4ecd-9db3-52c11b32bf87",
+            "timestamp": 1777764722.096729,
+            "content": {
+                "type": "function",
+                "function": {
+                    "description": "Retrieves a list of all available user tables in the database.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "required": []
+                    },
+                    "name": "data_db_get_list_of_tables"
+                }
+            },
+            "associated_id": null
+        },
+        {
+            "id": "ed32e747-7387-426e-8983-a9e56b15d1ee",
+            "timestamp": 1777764722.0974689,
+            "content": {
+                "type": "function",
+                "function": {
+                    "description": "Retrieves the schema (list of columns and their data types) for a specified database table.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "table_name": {
+                                "type": "string",
+                                "description": "The name of the database table to inspect."
+                            }
+                        },
+                        "required": [
+                            "table_name"
+                        ]
+                    },
+                    "name": "data_db_get_table_schema"
+                }
+            },
+            "associated_id": null
+        },
+        {
+            "id": "fbbf1d1c-fe44-4523-b333-bd7236c48773",
+            "timestamp": 1777764722.098222,
+            "content": {
+                "type": "function",
+                "function": {
+                    "description": "Fetches education records from the Supabase database.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "limit": {
+                                "type": "integer",
+                                "description": "The maximum number of records to return. Defaults to 10."
+                            }
+                        },
+                        "required": []
+                    },
+                    "name": "data_db_select_educations"
+                }
+            },
+            "associated_id": null
+        }
+    ],
+    "tool_results": [
+        {
+            "id": "6c399808-0321-4f9d-90fb-4bda9ca8e832",
+            "timestamp": 1777764760.112177,
+            "content": {
+                "tool_name": "data_db_get_list_of_tables",
+                "result": "[\"classes\", \"table_column_descriptions\", \"projects\", \"works\", \"visitor_messages\", \"educations\"]"
+            },
+            "associated_id": "360dc36b-0590-490c-8308-010117ed8c6a"
+        },
+        {
+            "id": "50ac178b-5a08-4f92-93ef-deaa182f4a76",
+            "timestamp": 1777764784.418045,
+            "content": {
+                "tool_name": "data_db_get_table_schema",
+                "result": "[{\"column_name\": \"id\", \"data_type\": \"bigint\", \"description\": \"Unique primary key for stable referencing and sorting.\\n\\nNote:\\nThis is a Primary Key.<pk/>\"}, {\"column_name\": \"title\", \"data_type\": \"text\", \"description\": \"Primary label or heading for UI components.\"}, {\"column_name\": \"lab\", \"data_type\": \"text\", \"description\": \"Research group or collaborating organization name.\"}, {\"column_name\": \"location\", \"data_type\": \"text\", \"description\": \"Geographical location or institution name.\"}, {\"column_name\": \"from_date\", \"data_type\": \"text\", \"description\": \"Start date in YYYY-MM-DD or textual format.\"}, {\"column_name\": \"to_date\", \"data_type\": \"text\", \"description\": \"End date in YYYY-MM-DD or Present.\"}, {\"column_name\": \"short_description\", \"data_type\": \"text\", \"description\": \"One-line summary for preview cards.\"}, {\"column_name\": \"full_description\", \"data_type\": \"text\", \"description\": \"Detailed text for main content sections.\"}, {\"column_name\": \"additional_info\", \"data_type\": \"text\", \"description\": \"JSON metadata for status, GPA, honors, or notes.\"}, {\"column_name\": \"skills\", \"data_type\": \"text\", \"description\": \"Comma-separated tags for list filtering.\"}, {\"column_name\": \"software_skills\", \"data_type\": \"text\", \"description\": \"Programming-specific comma-separated tags.\"}, {\"column_name\": \"data_skills\", \"data_type\": \"text\", \"description\": \"Data-science specific comma-separated tags.\"}, {\"column_name\": \"frameworks\", \"data_type\": \"text\", \"description\": \"Technologies or libraries used; comma-separated tags.\"}, {\"column_name\": \"ranking\", \"data_type\": \"bigint\", \"description\": \"Sort priority; lower values appear first.\"}, {\"column_name\": \"show_on_preview\", \"data_type\": \"bigint\", \"description\": \"Binary flag (1: show in preview, 0: hide).\"}, {\"column_name\": \"show_on_full\", \"data_type\": \"bigint\", \"description\": \"Binary flag (1: show full page, 0: hide).\"}, {\"column_name\": \"displayed_color\", \"data_type\": \"text\", \"description\": \"Hex code for UI theme accents and badges.\"}, {\"column_name\": \"html_content\", \"data_type\": \"text\", \"description\": \"Rich text formatted with HTML tags.\"}, {\"column_name\": \"media_dir_path\", \"data_type\": \"text\", \"description\": \"Directory path for associated images and assets.\"}, {\"column_name\": \"link\", \"data_type\": \"text\", \"description\": \"Direct URL to item or external resource.\"}, {\"column_name\": \"slug\", \"data_type\": \"text\", \"description\": \"Unique URL-safe identifier for routing.\"}, {\"column_name\": \"github_repos\", \"data_type\": \"text\", \"description\": \"Linked source code repository URLs.\"}, {\"column_name\": \"slug_old\", \"data_type\": \"text\", \"description\": \"Legacy URL slug for redirect handling.\"}]"
+            },
+            "associated_id": "ad59e605-c89d-4c43-8a77-1572c1a58046"
+        }
+    ],
+    "data_index": [],
+    "fetched_data": [],
+    "message_history": [
+        {
+            "id": "95f681ec-86bd-4663-bbe2-5273ead7881d",
+            "timestamp": 1777764723.319795,
+            "content": {
+                "role": "user",
+                "content": "hi"
+            },
+            "associated_id": null
+        },
+        {
+            "id": "b3c30595-1cce-4e0c-81f2-1298e97e43db",
+            "timestamp": 1777764730.643105,
+            "content": {
+                "role": "assistant",
+                "content": "Hello! How can I help you today?"
+            },
+            "associated_id": null
+        },
+        {
+            "id": "84293ad4-1c1d-4380-987d-f25c758a4932",
+            "timestamp": 1777764739.696455,
+            "content": {
+                "role": "user",
+                "content": "what tools you have"
+            },
+            "associated_id": null
+        },
+        {
+            "id": "b86cb11f-7e40-4b00-b1ff-dfa064419cde",
+            "timestamp": 1777764752.1214561,
+            "content": {
+                "role": "assistant",
+                "content": "I have a set of tools at my disposal that allow me to perform various tasks, including mathematical calculations, running system commands, and interacting with a database.\n\nHere is a summary of what I can do:\n\n**1. Mathematical Calculations:**\n*   `math_add`: Adds two numbers together.\n*   `math_power`: Calculates a number raised to an exponent (e.g., $x^y$).\n\n**2. System Operations (Shell):**\n*   `sh_run_script`: Executes basic shell commands like `ls` (list files), `cd` (change directory), and `pwd` (print working directory).\n\n**3. Database Operations (Supabase):**\n*   `data_db_get_list_of_tables`: Retrieves a list of all available user tables in the database.\n*   `data_db_get_table_schema`: Inspects the structure (schema) of a specific database table to see its columns and data types.\n*   `data_db_select_educations`: Fetches education records from a specific educational database.\n\nFeel free to let me know what you'd like to do, and I'll use the appropriate tool!"
+            },
+            "associated_id": null
+        },
+        {
+            "id": "360dc36b-0590-490c-8308-010117ed8c6a",
+            "timestamp": 1777764755.756663,
+            "content": {
+                "role": "user",
+                "content": "run data_db_get_list_of_tables"
+            },
+            "associated_id": null
+        },
+        {
+            "id": "051b8b92-5983-4aec-8533-815ec15ab1c7",
+            "timestamp": 1777764767.8595042,
+            "content": {
+                "role": "assistant",
+                "content": "The available tables in the database are:\n\n*   `classes`\n*   `table_column_descriptions`\n*   `projects`\n*   `works`\n*   `visitor_messages`\n*   `educations`\n\nDo you want to see the schema for any of these tables, or would you like to fetch data from a specific one? For example, you can ask me to \"show the schema for `projects`\"."
+            },
+            "associated_id": null
+        },
+        {
+            "id": "00a607bd-0445-47fd-9957-87e7202ce333",
+            "timestamp": 1777764772.038167,
+            "content": {
+                "role": "user",
+                "content": "run data_db_get_table_schema"
+            },
+            "associated_id": null
+        },
+        {
+            "id": "5832dda6-c072-4dd7-9668-7fabfd528d74",
+            "timestamp": 1777764778.573165,
+            "content": {
+                "role": "assistant",
+                "content": "Please specify which table you would like to see the schema for. I can inspect the schema for any of the following tables:\n\n*   `classes`\n*   `table_column_descriptions`\n*   `projects`\n*   `works`\n*   `visitor_messages`\n*   `educations`"
+            },
+            "associated_id": null
+        },
+        {
+            "id": "ad59e605-c89d-4c43-8a77-1572c1a58046",
+            "timestamp": 1777764781.843915,
+            "content": {
+                "role": "user",
+                "content": "projects"
+            },
+            "associated_id": null
+        },
+        {
+            "id": "be7f634c-c0ed-4357-8cb0-2f523fd25700",
+            "timestamp": 1777764814.794794,
+            "content": {
+                "role": "assistant",
+                "content": "Here is the schema for the **`projects`** table. This table appears to store detailed records about various projects, likely for a portfolio or academic showcase.\n\n| Column Name | Data Type | Description |\n| :--- | :--- | :--- |\n| **`id`** | `bigint` | Unique primary key for stable referencing and sorting. (Primary Key) |\n| **`title`** | `text` | Primary label or heading for UI components. |\n| **`lab`** | `text` | Research group or collaborating organization name. |\n| **`location`** | `text` | Geographical location or institution name. |\n| **`from_date`** | `text` | Start date (YYYY-MM-DD or textual format). |\n| **`to_date`** | `text` | End date (YYYY-MM-DD or 'Present'). |\n| **`short_description`** | `text` | One-line summary for preview cards. |\n| **`full_description`** | `text` | Detailed text for main content sections. |\n| **`additional_info`** | `text` | JSON metadata (e.g., status, GPA, honors, or notes). |\n| **`skills`** | `text` | Comma-separated tags for list filtering (general skills). |\n| **`software_skills`** | `text` | Comma-separated tags for list filtering (programming-specific skills). |\n| **`data_skills`** | `text` | Comma-separated tags for list filtering (data-science specific skills). |\n| **`frameworks`** | `text` | Technologies or libraries used; comma-separated tags. |\n| **`ranking`** | `bigint` | Sort priority; lower values appear first. |\n| **`show_on_preview`** | `bigint` | Binary flag (1: show in preview, 0: hide). |\n| **`show_on_full`** | `bigint` | Binary flag (1: show full page, 0: hide). |\n| **`displayed_color`** | `text` | Hex code for UI theme accents and badges. |\n| **`html_content`** | `text` | Rich text formatted with HTML tags. |\n| **`media_dir_path`** | `text` | Directory path for associated images and assets. |\n| **`link`** | `text` | Direct URL to item or external resource. |\n| **`slug`** | `text` | Unique URL-safe identifier for routing. |\n| **`github_repos`** | `text` | Linked source code repository URLs. |\n| **`slug_old`** | `text` | Legacy URL slug for redirect handling. |\n\nLet me know if you would like to see the schema for another table, or if you want to fetch specific data (e.g., \"Show me the top 5 projects\")."
+            },
+            "associated_id": null
+        }
+    ]
+}

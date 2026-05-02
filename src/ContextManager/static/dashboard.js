@@ -51,28 +51,39 @@ async function updateDashboard() {
         const messages = contextData.messages || [];
 
         const max = usage.max || 32768;
-        const used = usage.used || 0;
-        const free = usage.free || Math.max(0, max - used);
         const counts = usage.counts || {};
 
-        setSegment("seg-master", counts.master || 0, max);
-        setSegment("seg-tools", counts.tools || 0, max);
-        setSegment("seg-results", counts.results || 0, max);
-        setSegment("seg-index", counts.index || 0, max);
-        setSegment("seg-data", counts.data || 0, max);
-        setSegment("seg-history", counts.history || 0, max);
+        const master = counts.master || 0;
+        const tools = counts.tools || 0;
+        const results = counts.results || 0;
+        const index = counts.index || 0;
+        const data = counts.data || 0;
+        const user = counts.user || 0;
+        const assistant = counts.assistant || 0;
+
+        const used = usage.used || 0;
+        const free = usage.free || Math.max(0, max - used);
+
+        setSegment("seg-master", master, max);
+        setSegment("seg-tools", tools, max);
+        setSegment("seg-results", results, max);
+        setSegment("seg-index", index, max);
+        setSegment("seg-data", data, max);
+        setSegment("seg-user", user, max);
+        setSegment("seg-assistant", assistant, max);
         setSegment("seg-free", free, max);
 
         setText("used-count", used);
         setText("free-count", free);
         setText("total-count", max);
 
-        setText("count-master", counts.master || 0);
-        setText("count-tools", counts.tools || 0);
-        setText("count-results", counts.results || 0);
-        setText("count-index", counts.index || 0);
-        setText("count-data", counts.data || 0);
-        setText("count-history", counts.history || 0);
+        setText("count-master", master);
+        setText("count-tools", tools);
+        setText("count-results", results);
+        setText("count-index", index);
+        setText("count-data", data);
+        setText("count-user", user);
+        setText("count-assistant", assistant);
 
         document.getElementById("context-json").innerText = JSON.stringify(
             messages,

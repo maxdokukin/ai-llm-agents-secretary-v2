@@ -131,8 +131,12 @@ a:hover {
     background: #ef4738;
 }
 
-.bg-history {
-    background: #63bd62;
+.bg-user {
+    background: #1f7a3a;
+}
+
+.bg-assistant {
+    background: #9be89b;
 }
 
 .bg-free {
@@ -150,7 +154,7 @@ a:hover {
 
 .legend {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
     gap: 8px;
     margin-top: 14px;
     font-size: 13px;
