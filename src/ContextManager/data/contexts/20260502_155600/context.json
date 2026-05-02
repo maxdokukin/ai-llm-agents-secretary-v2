@@ -1,0 +1,180 @@
+{
+    "master_prompt": [
+        {
+            "id": "6a203eaa-85e9-4cb9-855d-f17c6cec20d9",
+            "timestamp": 1777762625.29701,
+            "content": "You are a capable AI assistant. Use tools when necessary.",
+            "associated_id": null
+        }
+    ],
+    "tools": [
+        {
+            "id": "8e51e59c-5a84-4d8f-ae90-bb97e7cc8c7a",
+            "timestamp": 1777762625.3009028,
+            "content": {
+                "type": "function",
+                "function": {
+                    "description": "Adds two numbers together.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "a": {
+                                "type": "number",
+                                "description": "The first number."
+                            },
+                            "b": {
+                                "type": "number",
+                                "description": "The second number."
+                            }
+                        },
+                        "required": [
+                            "a",
+                            "b"
+                        ]
+                    },
+                    "name": "math_add"
+                }
+            },
+            "associated_id": null
+        },
+        {
+            "id": "51a8dcfd-a1d9-4f42-b415-4cc649594273",
+            "timestamp": 1777762625.302447,
+            "content": {
+                "type": "function",
+                "function": {
+                    "description": "Calculates the result of a base number raised to an exponent.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "base": {
+                                "type": "number",
+                                "description": "The base number."
+                            },
+                            "exponent": {
+                                "type": "number",
+                                "description": "The power to raise the base to."
+                            }
+                        },
+                        "required": [
+                            "base",
+                            "exponent"
+                        ]
+                    },
+                    "name": "math_power"
+                }
+            },
+            "associated_id": null
+        },
+        {
+            "id": "3f8413b8-cac1-43dd-9369-e6ecf47ba242",
+            "timestamp": 1777762625.304064,
+            "content": {
+                "type": "function",
+                "function": {
+                    "description": "Executes allowed shell commands (ls, cd, pwd) on the local system and returns the standard output.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "command": {
+                                "type": "string",
+                                "description": "The command to execute. Only 'ls', 'cd', and 'pwd' are permitted."
+                            }
+                        },
+                        "required": [
+                            "command"
+                        ]
+                    },
+                    "name": "sh_run_script"
+                }
+            },
+            "associated_id": null
+        },
+        {
+            "id": "ded1661f-8609-4d24-aef1-fbb47cc006d5",
+            "timestamp": 1777762625.30492,
+            "content": {
+                "type": "function",
+                "function": {
+                    "description": "Retrieves a list of all available user tables in the database.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "required": []
+                    },
+                    "name": "data_db_get_list_of_tables"
+                }
+            },
+            "associated_id": null
+        },
+        {
+            "id": "3b7c6c39-6ba2-49c0-950c-ea64951c6679",
+            "timestamp": 1777762625.3059452,
+            "content": {
+                "type": "function",
+                "function": {
+                    "description": "Retrieves the schema (list of columns and their data types) for a specified database table.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "table_name": {
+                                "type": "string",
+                                "description": "The name of the database table to inspect."
+                            }
+                        },
+                        "required": [
+                            "table_name"
+                        ]
+                    },
+                    "name": "data_db_get_table_schema"
+                }
+            },
+            "associated_id": null
+        },
+        {
+            "id": "17be54a6-cc8a-4735-836b-cb78a9ab9e8b",
+            "timestamp": 1777762625.306912,
+            "content": {
+                "type": "function",
+                "function": {
+                    "description": "Fetches education records from the Supabase database.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "limit": {
+                                "type": "integer",
+                                "description": "The maximum number of records to return. Defaults to 10."
+                            }
+                        },
+                        "required": []
+                    },
+                    "name": "data_db_select_educations"
+                }
+            },
+            "associated_id": null
+        }
+    ],
+    "tool_results": [],
+    "data_index": [],
+    "fetched_data": [],
+    "message_history": [
+        {
+            "id": "078b8d76-2040-41f2-aede-f15118f7aac5",
+            "timestamp": 1777762627.3614998,
+            "content": {
+                "role": "user",
+                "content": "hi"
+            },
+            "associated_id": null
+        },
+        {
+            "id": "9a6ca17b-7899-47e6-8983-d1d24b1ab045",
+            "timestamp": 1777762638.446979,
+            "content": {
+                "role": "assistant",
+                "content": "Hello! How can I help you today?"
+            },
+            "associated_id": null
+        }
+    ]
+}
