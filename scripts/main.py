@@ -16,17 +16,17 @@ TEMPLATES_DIR = ROOT_DIR / "templates"
 
 app = FastAPI(title="Local LLM Orchestrator")
 
-# Ensure static/templates exist before mounting
+# Ensure static/templates exist
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
 TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)
-
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # --- Logic Configuration ---
 from src.ToolManager.ToolManager import ToolManager
 
 CTX_SERVER = "http://localhost:7999/api/context"
-SESSION_ID = "default"
+# Generate a unique Session ID for this run
+SESSION_ID = f"session_{uuid.uuid4().hex[:8]}"
 
 
 @app.get("/")
@@ -39,25 +39,41 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
 
     # 1. Init Local Tool Discovery
-    # Adjusted path to ensure it finds your toolbox folder
     t_manager = ToolManager(toolbox_dir="../src/ToolManager/toolbox")
 
-    # 2. LLM Inference Client (Port 8080)
+    # 2. LLM Inference Client (llama-server / Ollama)
     llm_client = AsyncOpenAI(base_url="http://localhost:8080/v1", api_key="sk-local")
 
     # 3. Bootstrap Context Server (Port 7999)
+    print(f"\n--- INITIALIZING CONTEXT SESSION: {SESSION_ID} ---")
+
     async with httpx.AsyncClient() as http:
         try:
+            # Initialize with Master Prompt
             await http.post(f"{CTX_SERVER}/master_prompt", json={
                 "session_id": SESSION_ID,
-                "text": "You are a capable AI assistant. Use tools when necessary."
+                "text": "You are a capable AI secretary. Use tools to satisfy requests."
             })
-            for schema in t_manager.get_schemas():
+
+            # Register discovered tools
+            schemas = t_manager.get_schemas()
+            for schema in schemas:
                 await http.post(f"{CTX_SERVER}/tools", json={
                     "session_id": SESSION_ID,
                     "tool_schema": schema
                 })
+
+            print(f"✅ Context {SESSION_ID} successfully initialized on Port 7999.")
+            print(f"🛠️  Registered {len(schemas)} tools.")
+
+            # Inform the UI
+            await websocket.send_json({
+                "type": "system",
+                "content": f"[CONNECTED] Session ID: {SESSION_ID}"
+            })
+
         except httpx.ConnectError:
+            print(f"❌ FAILED to connect to Context Server at {CTX_SERVER}")
             await websocket.send_json({"type": "system", "content": "❌ Error: Context Server (7999) is offline."})
             return
 
@@ -65,7 +81,7 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             user_text = await websocket.receive_text()
 
-            # Step A: Register User Message in Remote Context
+            # Step A: Register User Message
             async with httpx.AsyncClient() as http:
                 resp = await http.post(f"{CTX_SERVER}/message", json={
                     "session_id": SESSION_ID,
@@ -74,16 +90,14 @@ async def websocket_endpoint(websocket: WebSocket):
                 })
                 user_msg_id = resp.json()["id"]
 
-            await websocket.send_json({"type": "system", "content": "[SYSTEM] Agent thinking..."})
-
-            # --- RECENT REACT LOOP ---
+            # --- AGENT REACT LOOP ---
             while True:
-                # Step B: Fetch Compiled Context
+                # Step B: Fetch Compiled Context Ledger
                 async with httpx.AsyncClient() as http:
                     ctx_resp = await http.get(f"{CTX_SERVER}/assemble/{SESSION_ID}")
                     current_messages = ctx_resp.json()["messages"]
 
-                # Step C: Ask the LLM
+                # Step C: LLM Stream
                 response = await llm_client.chat.completions.create(
                     model="local-model",
                     messages=current_messages,
@@ -110,7 +124,7 @@ async def websocket_endpoint(websocket: WebSocket):
                             if tc.function.name: tool_calls[idx]["name"] += tc.function.name
                             if tc.function.arguments: tool_calls[idx]["arguments"] += tc.function.arguments
 
-                # Step D: Save Assistant's Reply
+                # Step D: Log Assistant Reply
                 if turn_content:
                     async with httpx.AsyncClient() as http:
                         await http.post(f"{CTX_SERVER}/message", json={
@@ -119,25 +133,22 @@ async def websocket_endpoint(websocket: WebSocket):
                             "content": turn_content
                         })
 
-                # Step E: Handle Execution or Exit
+                # Step E: Handle Completion or Tools
                 if not tool_calls:
-                    # Update the UI with fresh stats from the server
                     async with httpx.AsyncClient() as http:
                         stats = await http.get(f"{CTX_SERVER}/stats/{SESSION_ID}")
                         s = stats.json()
                         await websocket.send_json({
                             "type": "stats",
-                            "content": f"Context: {s['used']}/{s['max']} (Free: {s['free']})"
+                            "content": f"Session: {SESSION_ID} | Context: {s['used']}/{s['max']} chars"
                         })
-
                     await websocket.send_json({"type": "done"})
                     break
 
                 for tc in tool_calls.values():
-                    await websocket.send_json({"type": "system", "content": f"[EXE] {tc['name']}..."})
+                    await websocket.send_json({"type": "system", "content": f"[EXE] Calling {tc['name']}..."})
                     result = t_manager.execute_tool(tc["name"], tc["arguments"])
 
-                    # Log result to Context Server
                     async with httpx.AsyncClient() as http:
                         await http.post(f"{CTX_SERVER}/tool_results", json={
                             "session_id": SESSION_ID,
@@ -145,13 +156,14 @@ async def websocket_endpoint(websocket: WebSocket):
                             "result": str(result),
                             "associated_id": user_msg_id
                         })
-                    await websocket.send_json({"type": "system", "content": f"[OK] {tc['name']} finished."})
+                    await websocket.send_json({"type": "system", "content": f"[OK] {tc['name']} returned data."})
 
     except WebSocketDisconnect:
-        print("UI Client disconnected.")
+        print(f"Client disconnected from session: {SESSION_ID}")
 
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    # Added colors to uvicorn logs for easier reading
+    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="info")
