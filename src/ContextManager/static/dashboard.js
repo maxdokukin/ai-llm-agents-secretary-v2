@@ -10,15 +10,25 @@ function safePercent(value, max) {
 
 function setSegment(id, chars, max) {
     const el = document.getElementById(id);
-    const pct = safePercent(chars, max);
+    const charCount = Number(chars || 0);
+    const pct = safePercent(charCount, max);
 
-    el.style.width = pct + "%";
     el.textContent = "";
 
-    if (chars <= 0 || pct < 1.25) {
+    if (charCount <= 0) {
+        el.style.width = "0%";
         el.classList.add("is-empty");
+        el.classList.remove("is-visible-used");
+        return;
+    }
+
+    el.style.width = pct + "%";
+    el.classList.remove("is-empty");
+
+    if (id === "seg-free") {
+        el.classList.remove("is-visible-used");
     } else {
-        el.classList.remove("is-empty");
+        el.classList.add("is-visible-used");
     }
 }
 

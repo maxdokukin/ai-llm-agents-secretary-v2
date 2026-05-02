@@ -95,7 +95,7 @@ a:hover {
 
 .segment {
     height: 100%;
-    min-width: 0;
+    flex: 0 0 auto;
     padding: 0;
     overflow: hidden;
     border: none;
@@ -104,6 +104,11 @@ a:hover {
 
 .segment.is-empty {
     width: 0 !important;
+    min-width: 0 !important;
+}
+
+.segment.is-visible-used {
+    min-width: 8px;
 }
 
 .bg-master {
