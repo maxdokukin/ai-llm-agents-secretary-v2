@@ -3,12 +3,15 @@ import time
 import json
 import os
 import datetime
+import threading
 from typing import Dict, List, Any, Optional
 
 
 class ContextManager:
-    def __init__(self, max_context_size: int = 8192):
+    def __init__(self, max_context_size: int = 32768):
+        # max_context_size is treated as characters here. 32768 chars ≈ 8192 tokens.
         self.max_context_size = max_context_size
+        self._lock = threading.Lock()
 
         # ---------------------------------------------------------
         # Storage segments perfectly mirroring the visual architecture
@@ -24,7 +27,8 @@ class ContextManager:
 
         # --- Persistence & Logging Setup Restored ---
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        # Ensure path matches your project structure (e.g., ../data/contexts)
+
+        # Ensure path matches your project structure
         self.session_dir = os.path.join(os.path.dirname(__file__), "..", "..", "data", "contexts", timestamp)
         os.makedirs(self.session_dir, exist_ok=True)
 
@@ -32,7 +36,7 @@ class ContextManager:
         self.log_file = os.path.join(self.session_dir, "context.log")
 
         self._log_action("SERVER_START",
-                         {"message": f"Session initialized at {timestamp}", "max_size": self.max_context_size})
+                         {"message": f"Session initialized at {timestamp}", "max_size_chars": self.max_context_size})
         self._save_state()
 
     # --- Persistence Helpers ---
@@ -42,16 +46,18 @@ class ContextManager:
             "action": action,
             "details": details
         }
-        with open(self.log_file, "a", encoding="utf-8") as f:
-            f.write(json.dumps(log_entry) + "\n")
+        with self._lock:
+            with open(self.log_file, "a", encoding="utf-8") as f:
+                f.write(json.dumps(log_entry) + "\n")
 
     def _save_state(self):
         state = {
-            "config": {"max_context_size": self.max_context_size},
+            "config": {"max_context_size_chars": self.max_context_size},
             "segments": self.segments
         }
-        with open(self.state_file, "w", encoding="utf-8") as f:
-            json.dump(state, f, indent=4)
+        with self._lock:
+            with open(self.state_file, "w", encoding="utf-8") as f:
+                json.dump(state, f, indent=4)
 
     # --- Internal Helpers ---
     def _create_entry(self, content: Any, associated_id: Optional[str] = None) -> Dict:
@@ -95,8 +101,13 @@ class ContextManager:
         """Add a tool's JSON schema so the LLM knows it exists."""
         entry = self._create_entry(tool_schema)
         self.segments["tools"].append(entry)
-        self._log_action("ADD_TOOL",
-                         {"entry_id": entry["id"], "tool_name": tool_schema.get("function", {}).get("name", "unknown")})
+
+        # Safely extract tool name for logging
+        tool_name = "unknown"
+        if isinstance(tool_schema, dict):
+            tool_name = tool_schema.get("function", {}).get("name", "unknown")
+
+        self._log_action("ADD_TOOL", {"entry_id": entry["id"], "tool_name": tool_name})
         self._save_state()
         return entry["id"]
 
@@ -169,7 +180,7 @@ class ContextManager:
     def get_context(self) -> List[Dict[str, Any]]:
         """
         Builds the final payload to be sent to the LLM.
-        It physically reconstructs the blocks from the diagram.
+        It physically reconstructs the blocks from the internal state.
         """
         messages = []
 
@@ -197,9 +208,6 @@ class ContextManager:
             messages.append({"role": "system", "content": "\n".join(system_content)})
 
         # --- BLOCK COMPILATION: Conversation, Fetched Data, Tool Results ---
-        # We loop through the chat history and interleave the data/tool results
-        # that were specifically triggered by that message turn.
-
         for msg_entry in self.segments["message_history"]:
             # 1. Append the chat message
             messages.append({
@@ -224,14 +232,12 @@ class ContextManager:
                     for d in associated_data:
                         block_content.append(f"{d['content']['label']}:\n{d['content']['data']}")
 
-                # We inject this as a discrete system note immediately following the relevant message
                 messages.append({
                     "role": "system",
                     "content": "\n".join(block_content)
                 })
 
         # --- Fallback: Unassociated Data/Tools ---
-        # If tools or data were added without linking them to a user message ID, put them at the end.
         unassociated_data = [d for d in self.segments["fetched_data"] if not d["associated_id"]]
         unassociated_tools = [t for t in self.segments["tool_results"] if not t["associated_id"]]
 
@@ -252,7 +258,7 @@ class ContextManager:
         return messages
 
     def calculate_free_space(self) -> dict:
-        """Approximates the 'Free' block from the diagram."""
+        """Approximates the remaining space based on character counts."""
         total_chars = len(json.dumps(self.get_context()))
         return {
             "used": total_chars,
