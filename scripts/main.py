@@ -27,10 +27,25 @@ from src.ToolManager.ToolManager import ToolManager
 CTX_SERVER = "http://localhost:7999/api/context"
 SESSION_ID = f"session_{uuid.uuid4().hex[:8]}"
 
+# --- Sample Data Index ---
+DATA_INDEX = {
+    "user.name": "max dokukin",
+    "user.email": "maxdokukin@icloud.com",
+}
+
 
 @app.get("/")
 async def get_index():
     return FileResponse(TEMPLATES_DIR / "index.html")
+
+
+def build_data_index_text(data_index: dict) -> str:
+    lines = ["Data Index"]
+
+    for key, value in data_index.items():
+        lines.append(f"- {key}: {value}")
+
+    return "\n".join(lines)
 
 
 def tool_returns_data(t_manager: ToolManager, tool_name: str) -> bool:
@@ -112,6 +127,12 @@ async def websocket_endpoint(websocket: WebSocket):
                 "text": "You are a capable AI secretary. Use tools to satisfy requests."
             })
 
+            await http.post(f"{CTX_SERVER}/message", json={
+                "session_id": SESSION_ID,
+                "role": "system",
+                "content": build_data_index_text(DATA_INDEX),
+            })
+
             schemas = t_manager.get_schemas()
             for schema in schemas:
                 await http.post(f"{CTX_SERVER}/tools", json={
@@ -121,6 +142,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
             print(f"✅ Context {SESSION_ID} successfully initialized on Port 7999.")
             print(f"🛠️  Registered {len(schemas)} tools.")
+            print(f"📇 Loaded data index with {len(DATA_INDEX)} entries.")
 
             await websocket.send_json({
                 "type": "system",

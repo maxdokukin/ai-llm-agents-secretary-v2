@@ -37,8 +37,8 @@ class ToolManager:
                 continue
 
             rel_path = py_file.relative_to(self.toolbox_dir)
-            inferred_name = "_".join(rel_path.with_suffix("").parts)
-            module_name = f"toolbox_{inferred_name}"
+            inferred_name = ".".join(rel_path.with_suffix("").parts)
+            module_name = f"toolbox.{inferred_name}"
 
             returns_data = self._is_data_tool(py_file)
 

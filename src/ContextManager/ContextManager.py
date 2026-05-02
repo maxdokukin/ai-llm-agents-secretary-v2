@@ -21,7 +21,7 @@ class ContextManager:
         }
 
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.session_dir = os.path.join(os.getcwd(), "data", "contexts", timestamp)
+        self.session_dir = os.path.join(os.getcwd(), "../", "../", "data", "contexts", timestamp)
         os.makedirs(self.session_dir, exist_ok=True)
         self.state_file = os.path.join(self.session_dir, "context.json")
         self.log_file = os.path.join(self.session_dir, "context.log")
