@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Context: {{ session_id }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <p><a href="/">← Hub</a> / <b>{{ session_id }}</b></p>
+
+        <h1>Utilization Dashboard</h1>
+
+        <div class="card">
+            <h3>Context Utilization</h3>
+
+            <div class="ctx-bar" id="ctx-bar">
+                <div id="seg-master" class="segment bg-master" style="width: 0%"></div>
+                <div id="seg-tools" class="segment bg-tools" style="width: 0%"></div>
+                <div id="seg-results" class="segment bg-results" style="width: 0%"></div>
+                <div id="seg-index" class="segment bg-index" style="width: 0%"></div>
+                <div id="seg-data" class="segment bg-data" style="width: 0%"></div>
+                <div id="seg-history" class="segment bg-history" style="width: 0%"></div>
+                <div id="seg-free" class="segment bg-free" style="width: 100%"></div>
+            </div>
+
+            <div class="bar-meta">
+                <span>
+                    Used:
+                    <b id="used-count">0</b>
+                    /
+                    <span id="total-count">0</span>
+                    chars
+                </span>
+
+                <span>
+                    Free:
+                    <b id="free-count">0</b>
+                    chars
+                </span>
+
+                <span>
+                    Status:
+                    <span class="badge" id="status-badge">Live</span>
+                </span>
+            </div>
+
+            <div class="legend">
+                <div class="legend-item">
+                    <span class="legend-swatch bg-master"></span>
+                    Master: <b id="count-master">0</b>
+                </div>
+
+                <div class="legend-item">
+                    <span class="legend-swatch bg-tools"></span>
+                    Tools: <b id="count-tools">0</b>
+                </div>
+
+                <div class="legend-item">
+                    <span class="legend-swatch bg-results"></span>
+                    Tool Results: <b id="count-results">0</b>
+                </div>
+
+                <div class="legend-item">
+                    <span class="legend-swatch bg-index"></span>
+                    Data Index: <b id="count-index">0</b>
+                </div>
+
+                <div class="legend-item">
+                    <span class="legend-swatch bg-data"></span>
+                    Fetched Data: <b id="count-data">0</b>
+                </div>
+
+                <div class="legend-item">
+                    <span class="legend-swatch bg-history"></span>
+                    Message History: <b id="count-history">0</b>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Raw Context Ledger</h3>
+            <pre id="context-json">Loading...</pre>
+        </div>
+    </div>
+
+    <script>
+        window.CONTEXT_DASHBOARD = {
+            sessionId: {{ session_id_json | safe }}
+        };
+    </script>
+
+    <script src="{{ url_for('static', path='/dashboard.js') }}"></script>
+</body>
+</html>

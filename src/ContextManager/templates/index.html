@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Context Hub</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Context Hub</h1>
+
+        <div class="grid">
+            {% for item in sessions %}
+                <div class="card">
+                    <h3>Session: <a href="/{{ item.session_id }}">{{ item.session_id }}</a></h3>
+
+                    <p>
+                        Usage:
+                        {{ "{:,}".format(item.used) }}
+                        /
+                        {{ "{:,}".format(item.max) }}
+                        characters
+                    </p>
+
+                    <p class="muted">
+                        Free: {{ "{:,}".format(item.free) }} characters
+                    </p>
+
+                    <a class="button-link" href="/{{ item.session_id }}">Open Dashboard</a>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</body>
+</html>

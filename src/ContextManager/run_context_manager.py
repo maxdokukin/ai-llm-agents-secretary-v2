@@ -1,28 +1,187 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
-from typing import Optional, Dict
-import uvicorn
+from pathlib import Path
+from typing import Dict, Optional, List
+
 import json
+import uvicorn
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 
 # Import the logic engine
 from src.ContextManager.ContextManager import ContextManager
 
+
+BASE_DIR = Path(__file__).resolve().parent
+TEMPLATES_DIR = BASE_DIR / "templates"
+STATIC_DIR = BASE_DIR / "static"
+
+MAX_CONTEXT_SIZE = 32768
+
 app = FastAPI(title="Context Engineering Server")
+
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
 
 # Storage for active sessions
 sessions: Dict[str, ContextManager] = {
-    "default": ContextManager(max_context_size=32768)
+    "default": ContextManager(max_context_size=MAX_CONTEXT_SIZE)
 }
+
+
+# Sidecar usage ledger for the utilization bar.
+# This tracks usage by category when data is added through these API endpoints.
+session_usage: Dict[str, Dict[str, int]] = {
+    "default": {
+        "master": 0,
+        "tools": 0,
+        "results": 0,
+        "index": 0,
+        "data": 0,
+        "history": 0,
+    }
+}
+
+
+def empty_usage() -> Dict[str, int]:
+    return {
+        "master": 0,
+        "tools": 0,
+        "results": 0,
+        "index": 0,
+        "data": 0,
+        "history": 0,
+    }
 
 
 def get_cm(session_id: str) -> ContextManager:
     if session_id not in sessions:
-        sessions[session_id] = ContextManager(max_context_size=32768)
+        sessions[session_id] = ContextManager(max_context_size=MAX_CONTEXT_SIZE)
+
+    if session_id not in session_usage:
+        session_usage[session_id] = empty_usage()
+
     return sessions[session_id]
 
 
+def add_usage(session_id: str, category: str, amount: int) -> None:
+    if session_id not in session_usage:
+        session_usage[session_id] = empty_usage()
+
+    if category not in session_usage[session_id]:
+        session_usage[session_id][category] = 0
+
+    session_usage[session_id][category] += max(0, amount)
+
+
+def get_stat_value(stats: dict, keys: List[str], default: int = 0) -> int:
+    for key in keys:
+        value = stats.get(key)
+        if isinstance(value, (int, float)):
+            return int(value)
+
+    return default
+
+
+def classify_message(msg: dict) -> str:
+    role = str(msg.get("role", "")).lower()
+    content = str(msg.get("content", ""))
+    content_lower = content.lower()
+
+    msg_type = str(msg.get("type", "")).lower()
+    msg_kind = str(msg.get("kind", "")).lower()
+    category = str(msg.get("category", "")).lower()
+
+    marker = f"{msg_type} {msg_kind} {category} {content_lower}"
+
+    if role == "tool":
+        return "results"
+
+    if role == "system":
+        if "tool schema" in marker or '"parameters"' in marker or '"function"' in marker:
+            return "tools"
+        if "data index" in marker:
+            return "index"
+        if "fetched data" in marker or "retrieved data" in marker:
+            return "data"
+        return "master"
+
+    if "tool_schema" in marker or "tool schema" in marker:
+        return "tools"
+
+    if "tool_result" in marker or "tool result" in marker:
+        return "results"
+
+    if "data_index" in marker or "data index" in marker:
+        return "index"
+
+    if "fetched_data" in marker or "fetched data" in marker or "retrieved data" in marker:
+        return "data"
+
+    return "history"
+
+
+def estimate_usage_from_messages(messages: List[dict]) -> Dict[str, int]:
+    counts = empty_usage()
+
+    for msg in messages:
+        if not isinstance(msg, dict):
+            continue
+
+        content = msg.get("content", "")
+        if content is None:
+            content = ""
+
+        category = classify_message(msg)
+        counts[category] += len(str(content))
+
+    return counts
+
+
+def calculate_usage(session_id: str) -> dict:
+    cm = get_cm(session_id)
+    stats = cm.calculate_free_space()
+    messages = cm.get_context()
+
+    max_context = get_stat_value(
+        stats,
+        ["max", "maximum", "max_context_size", "total", "limit"],
+        MAX_CONTEXT_SIZE,
+    )
+
+    stats_used = get_stat_value(stats, ["used", "usage", "consumed"], 0)
+
+    tracked_counts = session_usage.get(session_id, empty_usage()).copy()
+    tracked_total = sum(tracked_counts.values())
+
+    # If the sidecar ledger has no data, fall back to classifying assembled messages.
+    if tracked_total == 0:
+        tracked_counts = estimate_usage_from_messages(messages)
+        tracked_total = sum(tracked_counts.values())
+
+    # Preserve compatibility with ContextManager's own accounting.
+    # If calculate_free_space() reports more used chars than the category ledger,
+    # put the difference into history so the visual bar still fills correctly.
+    effective_used = max(stats_used, tracked_total)
+
+    if effective_used > tracked_total:
+        tracked_counts["history"] += effective_used - tracked_total
+        tracked_total = effective_used
+
+    free = max(0, max_context - tracked_total)
+
+    return {
+        "max": max_context,
+        "used": tracked_total,
+        "free": free,
+        "counts": tracked_counts,
+        "stats": stats,
+    }
+
+
 # --- Pydantic Models ---
+
 class TextPayload(BaseModel):
     text: str
     session_id: str = "default"
@@ -46,100 +205,45 @@ class MessagePayload(BaseModel):
     session_id: str = "default"
 
 
-# --- UI COMPONENTS ---
+# --- UI ROUTES ---
 
-def get_shared_styles():
-    return """
-    <style>
-        body { font-family: 'Inter', -apple-system, sans-serif; background: #1e1e2e; color: #cdd6f4; padding: 20px; line-height: 1.5; }
-        .container { max-width: 1000px; margin: 0 auto; }
-        h1 { color: #b4befe; display: flex; align-items: center; gap: 10px; }
-        .card { background: #181825; border: 1px solid #313244; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
-        .progress-container { background: #313244; height: 24px; border-radius: 12px; overflow: hidden; margin: 15px 0; border: 1px solid #45475a; }
-        .progress-fill { height: 100%; transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
-        pre { background: #11111b; padding: 15px; border-radius: 8px; border: 1px solid #313244; overflow: auto; max-height: 500px; font-size: 13px; color: #a6adc8; }
-        .badge { background: #45475a; color: #f5e0dc; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: bold; }
-        a { color: #89b4fa; text-decoration: none; }
-        a:hover { text-decoration: underline; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
-    </style>
-    """
-
-
-@app.get("/", response_class=HTMLResponse)
-async def master_dashboard():
+@app.get("/")
+async def master_dashboard(request: Request):
     """Directory of all active sessions."""
-    links = ""
-    for s_id in sessions.keys():
-        stats = sessions[s_id].calculate_free_space()
-        links += f"""
-        <div class="card">
-            <h3>Session: <a href="/{s_id}">{s_id}</a></h3>
-            <p>Usage: {stats['used']} characters</p>
-            <a href="/{s_id}" style="background: #89b4fa; color: #11111b; padding: 8px 16px; border-radius: 6px; font-weight: bold;">Open Dashboard</a>
-        </div>
-        """
+    session_cards = []
 
-    return f"""
-    <html>
-        <head>{get_shared_styles()}<title>Context Hub</title></head>
-        <body>
-            <div class="container">
-                <h1>🧠 Context Hub</h1>
-                <div class="grid">{links}</div>
-            </div>
-        </body>
-    </html>
-    """
+    for session_id in sessions.keys():
+        usage = calculate_usage(session_id)
+        session_cards.append({
+            "session_id": session_id,
+            "used": usage["used"],
+            "max": usage["max"],
+            "free": usage["free"],
+        })
+
+    return templates.TemplateResponse(
+        request=request,
+        name="index.html",
+        context={
+            "sessions": session_cards,
+        },
+    )
 
 
-@app.get("/{session_id}", response_class=HTMLResponse)
-async def individual_dashboard(session_id: str):
-    """Deep dive dashboard for a single session."""
+@app.get("/{session_id}")
+async def individual_dashboard(request: Request, session_id: str):
+    """Live-updating deep dive dashboard for a single session."""
     if session_id not in sessions:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    cm = sessions[session_id]
-    stats = cm.calculate_free_space()
-    used, total = stats["used"], stats["max"]
-    perc = min(100, (used / total) * 100) if total > 0 else 0
-
-    # Dynamic Color
-    color = "#cba6f7"
-    if perc > 75: color = "#f9e2af"
-    if perc > 90: color = "#f38ba8"
-
-    return f"""
-    <html>
-        <head>
-            {get_shared_styles()}
-            <title>Context: {session_id}</title>
-            <meta http-equiv="refresh" content="3">
-        </head>
-        <body>
-            <div class="container">
-                <p><a href="/">← Back to Hub</a></p>
-                <h1>Session Dashboard <span class="badge">{session_id}</span></h1>
-
-                <div class="card">
-                    <h3>Memory Usage</h3>
-                    <div class="progress-container">
-                        <div class="progress-fill" style="width: {perc}%; background: {color};"></div>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; font-size: 14px;">
-                        <span>Used: <b>{used}</b> chars</span>
-                        <span>Limit: <b>{total}</b> chars</span>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <h3>Compiled Context Ledger</h3>
-                    <pre>{json.dumps(cm.get_context(), indent=2)}</pre>
-                </div>
-            </div>
-        </body>
-    </html>
-    """
+    return templates.TemplateResponse(
+        request=request,
+        name="dashboard.html",
+        context={
+            "session_id": session_id,
+            "session_id_json": json.dumps(session_id),
+        },
+    )
 
 
 # --- API ENDPOINTS ---
@@ -149,29 +253,41 @@ async def assemble_context(session_id: str):
     return {"messages": get_cm(session_id).get_context()}
 
 
+@app.get("/api/context/usage/{session_id}")
+async def get_usage(session_id: str):
+    return calculate_usage(session_id)
+
+
 @app.post("/api/context/master_prompt")
 async def add_master_prompt(payload: TextPayload):
     entry_id = get_cm(payload.session_id).add_master_prompt(payload.text)
+    add_usage(payload.session_id, "master", len(payload.text))
     return {"status": "success", "id": entry_id}
 
 
 @app.post("/api/context/tools")
 async def add_tool(payload: ToolPayload):
+    serialized_tool = json.dumps(payload.tool_schema, ensure_ascii=False)
     entry_id = get_cm(payload.session_id).add_tool(payload.tool_schema)
+    add_usage(payload.session_id, "tools", len(serialized_tool))
     return {"status": "success", "id": entry_id}
 
 
 @app.post("/api/context/message")
 async def add_message(payload: MessagePayload):
     entry_id = get_cm(payload.session_id).add_message(payload.role, payload.content)
+    add_usage(payload.session_id, "history", len(payload.content))
     return {"status": "success", "id": entry_id}
 
 
 @app.post("/api/context/tool_results")
 async def add_tool_result(payload: ToolResultPayload):
     entry_id = get_cm(payload.session_id).add_tool_result(
-        payload.tool_name, payload.result, payload.associated_id
+        payload.tool_name,
+        payload.result,
+        payload.associated_id,
     )
+    add_usage(payload.session_id, "results", len(payload.result))
     return {"status": "success", "id": entry_id}
 
 
