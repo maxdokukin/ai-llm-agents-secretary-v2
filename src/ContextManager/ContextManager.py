@@ -3,37 +3,39 @@ import time
 import json
 import os
 import datetime
+from typing import Dict, List, Any, Optional
 
 
 class ContextManager:
-    def __init__(self):
-        # Global Settings
-        self.context_size = 4096  # Default char count
-        self.compression_enabled = False
+    def __init__(self, max_context_size: int = 8192):
+        self.max_context_size = max_context_size
 
-        # Master Prompt
-        self.master_prompt = ""
+        # ---------------------------------------------------------
+        # Storage segments perfectly mirroring the visual architecture
+        # ---------------------------------------------------------
+        self.segments = {
+            "master_prompt": [],
+            "tools": [],
+            "tool_results": [],
+            "data_index": [],
+            "fetched_data": [],
+            "message_history": []
+        }
 
-        # Context Data
-        self.context_data = []
-        self.context_data_limit = 50
-
-        # Chat History
-        self.chat_history = []
-        self.chat_history_limit = 50
-
-        # --- Persistence & Logging Setup ---
+        # --- Persistence & Logging Setup Restored ---
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.session_dir = os.path.join("../data/contexts", timestamp)
+        # Ensure path matches your project structure (e.g., ../data/contexts)
+        self.session_dir = os.path.join(os.path.dirname(__file__), "..", "..", "data", "contexts", timestamp)
         os.makedirs(self.session_dir, exist_ok=True)
 
         self.state_file = os.path.join(self.session_dir, "context.json")
         self.log_file = os.path.join(self.session_dir, "context.log")
 
-        self._log_action("SERVER_START", {"message": f"Session initialized at {timestamp}"})
+        self._log_action("SERVER_START",
+                         {"message": f"Session initialized at {timestamp}", "max_size": self.max_context_size})
         self._save_state()
 
-    # --- Internal Persistence Helpers ---
+    # --- Persistence Helpers ---
     def _log_action(self, action: str, details: dict):
         log_entry = {
             "timestamp": time.time(),
@@ -44,160 +46,216 @@ class ContextManager:
             f.write(json.dumps(log_entry) + "\n")
 
     def _save_state(self):
+        state = {
+            "config": {"max_context_size": self.max_context_size},
+            "segments": self.segments
+        }
         with open(self.state_file, "w", encoding="utf-8") as f:
-            json.dump(self.get_full_state(), f, indent=4)
+            json.dump(state, f, indent=4)
 
-    def get_full_state(self) -> dict:
+    # --- Internal Helpers ---
+    def _create_entry(self, content: Any, associated_id: Optional[str] = None) -> Dict:
+        """Generates the standard traceable wrapper for every block."""
         return {
-            "config": {
-                "context_size": self.context_size,
-                "context_data_limit": self.context_data_limit,
-                "chat_history_limit": self.chat_history_limit,
-                "compression_enabled": self.compression_enabled
-            },
-            "master_prompt": self.master_prompt,
-            "context_data": self.context_data,
-            "chat_history": self.chat_history
-        }
-
-    # --- Global Context Size ---
-    def set_context_size(self, size: int):
-        self.context_size = size
-        self._log_action("SET_CONTEXT_SIZE", {"size": size})
-        self._save_state()
-
-    def get_context_size(self) -> int:
-        return self.context_size
-
-    # --- Master Prompt ---
-    def set_master_prompt(self, prompt: str):
-        self.master_prompt = prompt
-        self._log_action("SET_MASTER_PROMPT", {"prompt": prompt})
-        self._save_state()
-
-    def get_master_prompt(self) -> str:
-        return self.master_prompt
-
-    # --- Context Data ---
-    def add_context_data(self, label: str, data: str):
-        entry = {
-            "entry_id": str(uuid.uuid4()),
+            "id": str(uuid.uuid4()),
             "timestamp": time.time(),
-            "label": label,
-            "data": data
+            "content": content,
+            "associated_id": associated_id
         }
-        self.context_data.append(entry)
-        if len(self.context_data) > self.context_data_limit:
-            self.context_data = self.context_data[-self.context_data_limit:]
 
-        self._log_action("ADD_CONTEXT_DATA", {"entry_id": entry["entry_id"], "label": label})
+    def _remove_entry(self, segment: str, entry_id: str) -> bool:
+        """Generic remove function for any segment."""
+        initial_length = len(self.segments[segment])
+        self.segments[segment] = [e for e in self.segments[segment] if e["id"] != entry_id]
+        success = len(self.segments[segment]) < initial_length
+
+        if success:
+            self._log_action("REMOVE_ENTRY", {"segment": segment, "entry_id": entry_id})
+            self._save_state()
+
+        return success
+
+    # ==========================================
+    # 1. Master Prompt APIs
+    # ==========================================
+    def add_master_prompt(self, text: str) -> str:
+        entry = self._create_entry(text)
+        self.segments["master_prompt"].append(entry)
+        self._log_action("ADD_MASTER_PROMPT", {"entry_id": entry["id"]})
         self._save_state()
-        return entry["entry_id"]
+        return entry["id"]
 
-    def get_context_data(self):
-        return self.context_data
+    def remove_master_prompt(self, entry_id: str) -> bool:
+        return self._remove_entry("master_prompt", entry_id)
 
-    def set_context_data_limit(self, limit: int):
-        self.context_data_limit = limit
-        if len(self.context_data) > self.context_data_limit:
-            self.context_data = self.context_data[-self.context_data_limit:]
-
-        self._log_action("SET_DATA_LIMIT", {"limit": limit})
+    # ==========================================
+    # 2. Tools APIs
+    # ==========================================
+    def add_tool(self, tool_schema: dict) -> str:
+        """Add a tool's JSON schema so the LLM knows it exists."""
+        entry = self._create_entry(tool_schema)
+        self.segments["tools"].append(entry)
+        self._log_action("ADD_TOOL",
+                         {"entry_id": entry["id"], "tool_name": tool_schema.get("function", {}).get("name", "unknown")})
         self._save_state()
+        return entry["id"]
 
-    # --- Chat History ---
-    def _add_message(self, role: str, msg: str):
-        entry = {
-            "entry_id": str(uuid.uuid4()),
-            "timestamp": time.time(),
-            "role": role,
-            "content": msg
+    def remove_tool(self, entry_id: str) -> bool:
+        return self._remove_entry("tools", entry_id)
+
+    # ==========================================
+    # 3. Tool Results APIs
+    # ==========================================
+    def add_tool_result(self, tool_name: str, result: str, associated_id: Optional[str] = None) -> str:
+        """Add the output of an executed tool. Link to a user message ID if applicable."""
+        content = {"tool_name": tool_name, "result": result}
+        entry = self._create_entry(content, associated_id)
+        self.segments["tool_results"].append(entry)
+        self._log_action("ADD_TOOL_RESULT",
+                         {"entry_id": entry["id"], "tool_name": tool_name, "associated_id": associated_id})
+        self._save_state()
+        return entry["id"]
+
+    def remove_tool_result(self, entry_id: str) -> bool:
+        return self._remove_entry("tool_results", entry_id)
+
+    # ==========================================
+    # 4. Data Index APIs
+    # ==========================================
+    def add_data_index(self, index_info: str) -> str:
+        """Add summaries or pointers of data the LLM can ask to fetch."""
+        entry = self._create_entry(index_info)
+        self.segments["data_index"].append(entry)
+        self._log_action("ADD_DATA_INDEX", {"entry_id": entry["id"]})
+        self._save_state()
+        return entry["id"]
+
+    def remove_data_index(self, entry_id: str) -> bool:
+        return self._remove_entry("data_index", entry_id)
+
+    # ==========================================
+    # 5. Fetched Data APIs
+    # ==========================================
+    def add_fetched_data(self, label: str, data: str, associated_id: Optional[str] = None) -> str:
+        """Add raw data blobs retrieved from the index. Link to a user message ID if applicable."""
+        content = {"label": label, "data": data}
+        entry = self._create_entry(content, associated_id)
+        self.segments["fetched_data"].append(entry)
+        self._log_action("ADD_FETCHED_DATA", {"entry_id": entry["id"], "label": label, "associated_id": associated_id})
+        self._save_state()
+        return entry["id"]
+
+    def remove_fetched_data(self, entry_id: str) -> bool:
+        return self._remove_entry("fetched_data", entry_id)
+
+    # ==========================================
+    # 6. Message History APIs
+    # ==========================================
+    def add_message(self, role: str, content: str) -> str:
+        """Add a conversational turn (user or assistant)."""
+        msg_content = {"role": role, "content": content}
+        entry = self._create_entry(msg_content)
+        self.segments["message_history"].append(entry)
+        self._log_action("ADD_MESSAGE", {"entry_id": entry["id"], "role": role})
+        self._save_state()
+        return entry["id"]
+
+    def remove_message(self, entry_id: str) -> bool:
+        return self._remove_entry("message_history", entry_id)
+
+    # ==========================================
+    # LLM Assembly
+    # ==========================================
+    def get_context(self) -> List[Dict[str, Any]]:
+        """
+        Builds the final payload to be sent to the LLM.
+        It physically reconstructs the blocks from the diagram.
+        """
+        messages = []
+
+        # --- BLOCK COMPILATION: System, Tools, and Index ---
+        system_content = []
+
+        if self.segments["master_prompt"]:
+            system_content.append("=== SYSTEM INSTRUCTIONS ===")
+            for entry in self.segments["master_prompt"]:
+                system_content.append(entry["content"])
+
+        if self.segments["tools"]:
+            system_content.append("\n=== AVAILABLE TOOLS ===")
+            system_content.append("You have access to the following tools. Output standard JSON to trigger them.")
+            tools_list = [entry["content"] for entry in self.segments["tools"]]
+            system_content.append(json.dumps(tools_list, indent=2))
+
+        if self.segments["data_index"]:
+            system_content.append("\n=== DATA INDEX ===")
+            for entry in self.segments["data_index"]:
+                system_content.append(entry["content"])
+
+        # Create one unified System Message block
+        if system_content:
+            messages.append({"role": "system", "content": "\n".join(system_content)})
+
+        # --- BLOCK COMPILATION: Conversation, Fetched Data, Tool Results ---
+        # We loop through the chat history and interleave the data/tool results
+        # that were specifically triggered by that message turn.
+
+        for msg_entry in self.segments["message_history"]:
+            # 1. Append the chat message
+            messages.append({
+                "role": msg_entry["content"]["role"],
+                "content": msg_entry["content"]["content"]
+            })
+
+            # 2. Check for associative data linked to this specific message
+            msg_id = msg_entry["id"]
+            associated_data = [d for d in self.segments["fetched_data"] if d["associated_id"] == msg_id]
+            associated_tools = [t for t in self.segments["tool_results"] if t["associated_id"] == msg_id]
+
+            if associated_data or associated_tools:
+                block_content = []
+                if associated_tools:
+                    block_content.append("--- TOOL EXECUTIONS ---")
+                    for t in associated_tools:
+                        block_content.append(f"Tool: {t['content']['tool_name']}\nResult: {t['content']['result']}")
+
+                if associated_data:
+                    block_content.append("--- FETCHED DATA ---")
+                    for d in associated_data:
+                        block_content.append(f"{d['content']['label']}:\n{d['content']['data']}")
+
+                # We inject this as a discrete system note immediately following the relevant message
+                messages.append({
+                    "role": "system",
+                    "content": "\n".join(block_content)
+                })
+
+        # --- Fallback: Unassociated Data/Tools ---
+        # If tools or data were added without linking them to a user message ID, put them at the end.
+        unassociated_data = [d for d in self.segments["fetched_data"] if not d["associated_id"]]
+        unassociated_tools = [t for t in self.segments["tool_results"] if not t["associated_id"]]
+
+        if unassociated_data or unassociated_tools:
+            block_content = []
+            if unassociated_tools:
+                block_content.append("--- RECENT TOOL EXECUTIONS ---")
+                for t in unassociated_tools:
+                    block_content.append(f"Tool: {t['content']['tool_name']}\nResult: {t['content']['result']}")
+
+            if unassociated_data:
+                block_content.append("--- RECENT FETCHED DATA ---")
+                for d in unassociated_data:
+                    block_content.append(f"{d['content']['label']}:\n{d['content']['data']}")
+
+            messages.append({"role": "system", "content": "\n".join(block_content)})
+
+        return messages
+
+    def calculate_free_space(self) -> dict:
+        """Approximates the 'Free' block from the diagram."""
+        total_chars = len(json.dumps(self.get_context()))
+        return {
+            "used": total_chars,
+            "free": max(0, self.max_context_size - total_chars),
+            "max": self.max_context_size
         }
-        self.chat_history.append(entry)
-        if len(self.chat_history) > self.chat_history_limit:
-            self.chat_history = self.chat_history[-self.chat_history_limit:]
-
-        self._log_action("ADD_MESSAGE", {"role": role, "entry_id": entry["entry_id"]})
-        self._save_state()
-        return entry["entry_id"]
-
-    def add_user_message(self, msg: str):
-        return self._add_message("user", msg)
-
-    def add_llm_message(self, msg: str):
-        return self._add_message("llm", msg)
-
-    def set_chat_history_limit(self, limit: int):
-        self.chat_history_limit = limit
-        if len(self.chat_history) > self.chat_history_limit:
-            self.chat_history = self.chat_history[-self.chat_history_limit:]
-
-        self._log_action("SET_CHAT_LIMIT", {"limit": limit})
-        self._save_state()
-
-    def get_message_history(self, author: str = "all"):
-        if author == "all":
-            return self.chat_history
-        return [msg for msg in self.chat_history if msg["role"] == author]
-
-    # --- Compression ---
-    def set_context_compression(self, enabled: bool):
-        self.compression_enabled = enabled
-        self._log_action("SET_COMPRESSION", {"enabled": enabled})
-        self._save_state()
-
-    # --- Outputs & Visualizations ---
-    def print_context(self) -> str:
-        parts = []
-        if self.master_prompt:
-            parts.append(f"System: {self.master_prompt}")
-
-        if self.context_data:
-            data_str = json.dumps(self.context_data, indent=2)
-            parts.append(f"Context Data:\n{data_str}")
-
-        if self.chat_history:
-            for msg in self.chat_history:
-                parts.append(f"{msg['role'].capitalize()}: {msg['content']}")
-
-        full_context = "\n\n".join(parts)
-
-        if self.compression_enabled and len(full_context) > self.context_size:
-            full_context = full_context[:self.context_size] + "\n...[TRUNCATED/COMPRESSED]"
-
-        return full_context
-
-    def get_usage_stats(self):
-        prompt_len = len(self.master_prompt)
-        data_len = sum(len(json.dumps(d)) for d in self.context_data)
-        history_len = sum(len(m["content"]) for m in self.chat_history)
-        total_used = prompt_len + data_len + history_len
-        return prompt_len, data_len, history_len, total_used
-
-    def get_cli_bar(self, width: int = 50) -> str:
-        prompt_len, data_len, history_len, total_used = self.get_usage_stats()
-
-        if self.context_size == 0:
-            return "Context size limit is 0"
-
-        prompt_chars = int((prompt_len / self.context_size) * width)
-        data_chars = int((data_len / self.context_size) * width)
-        history_chars = int((history_len / self.context_size) * width)
-
-        total_chars = prompt_chars + data_chars + history_chars
-        if total_chars > width:
-            scale = width / total_chars
-            prompt_chars = int(prompt_chars * scale)
-            data_chars = int(data_chars * scale)
-            history_chars = int(history_chars * scale)
-
-        free_chars = width - (prompt_chars + data_chars + history_chars)
-
-        bar = (
-                "#" * prompt_chars +
-                "x" * data_chars +
-                "*" * history_chars +
-                "." * max(0, free_chars)
-        )
-
-        return f"------------\n|{bar}|\n------------"
