@@ -1,0 +1,156 @@
+body {
+    background-color: #030303;
+    color: #00FF41;
+    font-family: 'Courier New', Courier, monospace;
+    margin: 0;
+    padding: 20px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    text-shadow: 0 0 5px #00FF41;
+}
+
+#chat-container {
+    flex-grow: 1;
+    overflow-y: auto;
+    margin-bottom: 20px;
+    padding-right: 10px;
+}
+
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: #000; }
+::-webkit-scrollbar-thumb { background: #008F11; }
+
+.message {
+    margin-bottom: 15px;
+    line-height: 1.4;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+}
+
+.user-msg { color: #FFFFFF; text-shadow: 0 0 5px #FFFFFF; }
+.user-msg::before { content: "USER > "; color: #008F11; }
+
+.agent-msg::before { content: "SYS  > "; color: #008F11; }
+
+.tool-msg { color: #008F11; font-style: italic; opacity: 0.8; }
+.tool-msg::before { content: "[PROCESS] "; }
+
+.stats-msg { color: #008F11; opacity: 0.6; font-size: 0.9em; margin-top: 5px; }
+
+/* --- Matrix Thinking Styles --- */
+.thinking-container {
+    margin-bottom: 15px;
+    border-left: 2px solid #004d09;
+    padding-left: 15px;
+    background: linear-gradient(90deg, rgba(0, 143, 17, 0.05) 0%, rgba(0,0,0,0) 100%);
+}
+
+.thinking-header {
+    cursor: pointer;
+    color: #004d09;
+    font-size: 0.85em;
+    font-weight: bold;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    transition: color 0.3s;
+}
+
+.thinking-header:hover { color: #008F11; }
+
+.thinking-header::before {
+    content: "[+] DECRYPTING LOGIC PROTOCOLS...";
+    margin-right: 10px;
+}
+
+.thinking-header.expanded::before {
+    content: "[-] ENCRYPTED THOUGHT STREAM:";
+    color: #008F11;
+}
+
+/* Smooth Progress Bar Transitions */
+.progress-wrapper {
+    width: 100%;
+    background-color: #001100;
+    border: 1px solid #004d09;
+    position: relative;
+
+    /* Hidden State Properties */
+    max-height: 0;
+    opacity: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+    border-width: 0;
+    overflow: hidden;
+    transition: all 0.5s ease-out;
+}
+
+.progress-wrapper.expanded {
+    /* Expanded State Properties */
+    max-height: 6px;
+    opacity: 1;
+    margin-top: 5px;
+    margin-bottom: 5px;
+    border-width: 1px;
+}
+
+.progress-bar {
+    height: 100%;
+    background-color: #00FF41;
+    width: 0%;
+    box-shadow: 0 0 8px #00FF41;
+    transition: width 0.1s linear;
+}
+
+.progress-bar.complete {
+    width: 100% !important;
+    background-color: #008F11;
+    box-shadow: none;
+    transition: width 0.5s ease-out, background-color 0.5s;
+}
+
+/* Smooth Content Transitions */
+.thinking-content {
+    color: #008F11;
+    font-size: 0.85em;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+
+    /* Hidden State Properties */
+    max-height: 0;
+    opacity: 0;
+    margin-top: 0;
+    overflow: hidden;
+    transition: max-height 0.8s ease-in-out, opacity 0.5s ease-out, margin-top 0.5s ease-out;
+}
+
+.thinking-content.expanded {
+    /* Expanded State Properties */
+    max-height: 8000px; /* Large enough buffer to allow natural expansion */
+    opacity: 0.7;
+    margin-top: 8px;
+}
+
+#input-container {
+    display: flex;
+    align-items: center;
+    border-top: 1px solid #008F11;
+    padding-top: 10px;
+}
+
+#prompt { color: #008F11; margin-right: 10px; }
+
+#user-input {
+    background: transparent;
+    border: none;
+    color: #00FF41;
+    font-family: inherit;
+    font-size: 1em;
+    flex-grow: 1;
+    outline: none;
+    text-shadow: 0 0 5px #00FF41;
+}
+
+#user-input:focus { border-bottom: 1px solid #00FF41; }
