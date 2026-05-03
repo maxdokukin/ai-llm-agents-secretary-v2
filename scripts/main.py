@@ -155,12 +155,11 @@ async def websocket_endpoint(websocket: WebSocket):
                     current_messages = ctx_resp.json()["messages"]
 
                 # --- ANTI-PREFILL FIX ---
-                # Thinking models reject prompts that end with an assistant message.
-                # We append a transient user message to hand the microphone back to the AI.
-                if current_messages and current_messages[-1].get("role") == "assistant":
+                # Now ensures the LLM gets the microphone back even after inline system logs
+                if current_messages and current_messages[-1].get("role") != "user":
                     current_messages.append({
                         "role": "user",
-                        "content": "Tool execution logged. Please evaluate the context and continue."
+                        "content": "Action completed. Please evaluate the context and continue."
                     })
                 # ------------------------
 
