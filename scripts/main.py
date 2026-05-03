@@ -154,6 +154,16 @@ async def websocket_endpoint(websocket: WebSocket):
                     ctx_resp = await http.get(f"{CTX_SERVER}/assemble/{SESSION_ID}")
                     current_messages = ctx_resp.json()["messages"]
 
+                # --- ANTI-PREFILL FIX ---
+                # Thinking models reject prompts that end with an assistant message.
+                # We append a transient user message to hand the microphone back to the AI.
+                if current_messages and current_messages[-1].get("role") == "assistant":
+                    current_messages.append({
+                        "role": "user",
+                        "content": "Tool execution logged. Please evaluate the context and continue."
+                    })
+                # ------------------------
+
                 # Step C: LLM Stream
                 schemas = t_manager.get_schemas()
                 response = await llm_client.chat.completions.create(
