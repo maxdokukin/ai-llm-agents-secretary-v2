@@ -8,7 +8,7 @@ from typing import Dict, List, Any, Optional
 
 
 class ContextManager:
-    def __init__(self, session_id: str = "default", max_context_size: int = 32768):
+    def __init__(self, session_id: str = "default", max_context_size: int = 128000):
         self.session_id = session_id
         self.max_context_size = max_context_size
         self._lock = threading.RLock()

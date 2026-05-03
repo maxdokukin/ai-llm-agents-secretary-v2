@@ -35,12 +35,10 @@ def fetch_db_index() -> dict:
 
         # 2. Define the tables and the exact columns needed for the index
         tables_config = {
-            "classes": ["name", "location", "short_description", "topics"],
-            "projects": ["title", "lab", "location", "from_date", "to_date", "short_description", "skills",
-                         "software_skills", "data_skills", "frameworks", "ranking", "slug"],
-            "works": ["title", "employer", "location", "from_date", "to_date", "short_description", "skills",
-                      "frameworks", "ranking", "slug", "link"],
-            "educations": ["location", "from_date", "to_date", "topics", "title", "subtitle"]
+            "classes": ["name"],
+            "projects": ["title", "short_description", "skills", "software_skills", "data_skills", "frameworks", "ranking", "slug"],
+            "works": ["title", "employer", "short_description", "skills", "frameworks", "ranking", "slug"],
+            "educations": ["location", "title", "subtitle"]
         }
 
         output = {
