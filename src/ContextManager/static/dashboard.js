@@ -50,7 +50,8 @@ async function updateDashboard() {
 
         const messages = contextData.messages || [];
 
-        const max = usage.max || 32768;
+        // STRICTLY reads from the API now. No hardcoded frontend constants.
+        const max = usage.max || 128000;
         const counts = usage.counts || {};
 
         const master = counts.master || 0;

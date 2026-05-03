@@ -6,9 +6,11 @@ import datetime
 import threading
 from typing import Dict, List, Any, Optional
 
+# --- ONE CONSTANT TO RULE THEM ALL ---
+MAX_CONTEXT_SIZE = 128000
 
 class ContextManager:
-    def __init__(self, session_id: str = "default", max_context_size: int = 128000):
+    def __init__(self, session_id: str = "default", max_context_size: int = MAX_CONTEXT_SIZE):
         self.session_id = session_id
         self.max_context_size = max_context_size
         self._lock = threading.RLock()
@@ -140,6 +142,7 @@ class ContextManager:
             messages = []
             sys_block = []
 
+            # 1. Base System Prompts
             if self.segments["master_prompt"]:
                 sys_block.append("=== SYSTEM ===\n" + "\n".join([e["content"] for e in self.segments["master_prompt"]]))
 
@@ -154,25 +157,31 @@ class ContextManager:
                 if idx_lines:
                     sys_block.append("\n=== DATA INDEX ===\n" + "\n".join(idx_lines))
 
-            if self.segments["fetched_data"]:
-                fd_blocks = []
-                for e in self.segments["fetched_data"]:
-                    fd_blocks.append(
-                        f"Tool: {e['tool_name']}\nAssociated Message ID: {e['associated_id']}\n\n{e['data']}")
-                if fd_blocks:
-                    sys_block.append("\n=== FETCHED DATA ===\n" + "\n---\n".join(fd_blocks))
-
             if sys_block:
                 messages.append({"role": "system", "content": "\n".join(sys_block)})
 
+            # 2. History & Inline Logs
             for msg in self.segments["message_history"]:
                 messages.append(msg["content"])
                 mid = msg["id"]
+
+                # Retrieve tools and data mapped to this particular message
                 related_tools = [t for t in self.segments["tool_results"] if t["associated_id"] == mid]
-                if related_tools:
-                    t_content = "\n".join(
-                        [f"Tool: {t['content']['tool_name']}\nOutput: {t['content']['result']}" for t in related_tools])
-                    messages.append({"role": "system", "content": f"--- TOOL RESULTS ---\n{t_content}"})
+                related_data = [d for d in self.segments["fetched_data"] if d["associated_id"] == mid]
+
+                # Append them linearly instead of throwing data into the header block
+                if related_tools or related_data:
+                    blocks = []
+                    if related_tools:
+                        t_content = "\n".join(
+                            [f"Tool: {t['content']['tool_name']}\nOutput: {t['content']['result']}" for t in
+                             related_tools])
+                        blocks.append(f"--- TOOL RESULTS ---\n{t_content}")
+                    if related_data:
+                        d_content = "\n".join([f"Tool: {d['tool_name']}\nData:\n{d['data']}" for d in related_data])
+                        blocks.append(f"--- FETCHED DATA ---\n{d_content}")
+
+                    messages.append({"role": "system", "content": "\n\n".join(blocks)})
 
             return messages
 
