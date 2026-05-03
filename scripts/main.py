@@ -39,7 +39,25 @@ async def get_index():
     return FileResponse(TEMPLATES_DIR / "index.html")
 
 
+def build_data_index_text(data_index: dict) -> str:
+    lines = ["Data Index"]
+
+    for key, value in data_index.items():
+        lines.append(f"- {key}: {value}")
+
+    return "\n".join(lines)
+
+
 def tool_returns_data(t_manager: ToolManager, tool_name: str) -> bool:
+    """
+    Returns whether a registered tool is a data-returning tool.
+
+    Primary source:
+        ToolManager.tool_returns_data
+
+    Fallback:
+        function.returns_data inside the tool schema
+    """
     if hasattr(t_manager, "tool_returns_data"):
         return bool(t_manager.tool_returns_data.get(tool_name, False))
 
@@ -60,13 +78,25 @@ async def append_tool_result_to_context(
     associated_id: str,
     returns_data: bool,
 ) -> None:
+    """
+    Routes tool output into the correct context bucket.
+
+    Data tools:
+        Appended as system-level fetched data.
+
+    Non-data tools:
+        Appended as regular tool results.
+    """
     if returns_data:
-        # Route strictly structured payload to the fetched_data endpoint
-        await http.post(f"{CTX_SERVER}/fetched_data", json={
+        await http.post(f"{CTX_SERVER}/message", json={
             "session_id": session_id,
-            "tool_name": tool_name,
-            "data": result,
-            "associated_id": associated_id
+            "role": "system",
+            "content": (
+                f"Fetched Data\n"
+                f"Tool: {tool_name}\n"
+                f"Associated Message ID: {associated_id}\n\n"
+                f"{result}"
+            )
         })
     else:
         await http.post(f"{CTX_SERVER}/tool_results", json={
@@ -97,10 +127,10 @@ async def websocket_endpoint(websocket: WebSocket):
                 "text": "You are a capable AI secretary. Use tools to satisfy requests."
             })
 
-            # Pass the raw dictionary dynamically instead of building a string
-            await http.post(f"{CTX_SERVER}/data_index", json={
+            await http.post(f"{CTX_SERVER}/message", json={
                 "session_id": SESSION_ID,
-                "index_data": DATA_INDEX,
+                "role": "system",
+                "content": build_data_index_text(DATA_INDEX),
             })
 
             schemas = t_manager.get_schemas()
@@ -189,14 +219,21 @@ async def websocket_endpoint(websocket: WebSocket):
                             if tc.function.arguments:
                                 tool_calls[idx]["arguments"] += tc.function.arguments
 
-                # Step D: Log Assistant Reply
-                if turn_content:
+                # Step D: Log Assistant Reply & Ensure Tool Intent is Recorded
+                assistant_log = turn_content
+                if tool_calls:
+                    for tc in tool_calls.values():
+                        assistant_log += f"\n[Action: Executed tool '{tc['name']}' with args: {tc['arguments']}]"
+
+                assistant_msg_id = None
+                if assistant_log.strip():
                     async with httpx.AsyncClient() as http:
-                        await http.post(f"{CTX_SERVER}/message", json={
+                        resp = await http.post(f"{CTX_SERVER}/message", json={
                             "session_id": SESSION_ID,
                             "role": "assistant",
-                            "content": turn_content
+                            "content": assistant_log.strip()
                         })
+                        assistant_msg_id = resp.json()["id"]
 
                 # Step E: Handle Completion or Tools
                 if not tool_calls:
@@ -229,7 +266,7 @@ async def websocket_endpoint(websocket: WebSocket):
                             session_id=SESSION_ID,
                             tool_name=tool_name,
                             result=result,
-                            associated_id=user_msg_id,
+                            associated_id=assistant_msg_id or user_msg_id,
                             returns_data=returns_data,
                         )
 
@@ -246,4 +283,5 @@ async def websocket_endpoint(websocket: WebSocket):
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="127.0.0.1", port=8000, log_level="info")
