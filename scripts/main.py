@@ -39,25 +39,7 @@ async def get_index():
     return FileResponse(TEMPLATES_DIR / "index.html")
 
 
-def build_data_index_text(data_index: dict) -> str:
-    lines = ["Data Index"]
-
-    for key, value in data_index.items():
-        lines.append(f"- {key}: {value}")
-
-    return "\n".join(lines)
-
-
 def tool_returns_data(t_manager: ToolManager, tool_name: str) -> bool:
-    """
-    Returns whether a registered tool is a data-returning tool.
-
-    Primary source:
-        ToolManager.tool_returns_data
-
-    Fallback:
-        function.returns_data inside the tool schema
-    """
     if hasattr(t_manager, "tool_returns_data"):
         return bool(t_manager.tool_returns_data.get(tool_name, False))
 
@@ -78,25 +60,13 @@ async def append_tool_result_to_context(
     associated_id: str,
     returns_data: bool,
 ) -> None:
-    """
-    Routes tool output into the correct context bucket.
-
-    Data tools:
-        Appended as system-level fetched data.
-
-    Non-data tools:
-        Appended as regular tool results.
-    """
     if returns_data:
-        await http.post(f"{CTX_SERVER}/message", json={
+        # Route strictly structured payload to the fetched_data endpoint
+        await http.post(f"{CTX_SERVER}/fetched_data", json={
             "session_id": session_id,
-            "role": "system",
-            "content": (
-                f"Fetched Data\n"
-                f"Tool: {tool_name}\n"
-                f"Associated Message ID: {associated_id}\n\n"
-                f"{result}"
-            )
+            "tool_name": tool_name,
+            "data": result,
+            "associated_id": associated_id
         })
     else:
         await http.post(f"{CTX_SERVER}/tool_results", json={
@@ -127,10 +97,10 @@ async def websocket_endpoint(websocket: WebSocket):
                 "text": "You are a capable AI secretary. Use tools to satisfy requests."
             })
 
-            await http.post(f"{CTX_SERVER}/message", json={
+            # Pass the raw dictionary dynamically instead of building a string
+            await http.post(f"{CTX_SERVER}/data_index", json={
                 "session_id": SESSION_ID,
-                "role": "system",
-                "content": build_data_index_text(DATA_INDEX),
+                "index_data": DATA_INDEX,
             })
 
             schemas = t_manager.get_schemas()
@@ -276,5 +246,4 @@ async def websocket_endpoint(websocket: WebSocket):
 
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(app, host="127.0.0.1", port=8000, log_level="info")
