@@ -28,10 +28,11 @@ CTX_SERVER = "http://localhost:7999/api/context"
 SESSION_ID = f"session_{uuid.uuid4().hex[:8]}"
 
 # --- Sample Data Index ---
-DATA_INDEX = {
-    "user.name": "max dokukin",
-    "user.email": "maxdokukin@icloud.com",
-}
+from src.data.supabase import fetch_db_index
+# DATA_INDEX = {
+#     "user.name": "max dokukin",
+#     "user.email": "maxdokukin@icloud.com",
+# }
 
 
 @app.get("/")
@@ -107,7 +108,7 @@ async def websocket_endpoint(websocket: WebSocket):
             # Routes dictionary to the dedicated data_index array in JSON
             await http.post(f"{CTX_SERVER}/data_index", json={
                 "session_id": SESSION_ID,
-                "index_data": DATA_INDEX,
+                "index_data": fetch_db_index(),
             })
 
             schemas = t_manager.get_schemas()
@@ -119,7 +120,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
             print(f"✅ Context {SESSION_ID} successfully initialized on Port 7999.")
             print(f"🛠️  Registered {len(schemas)} tools.")
-            print(f"📇 Loaded data index with {len(DATA_INDEX)} entries.")
+            # print(f"📇 Loaded data index with {len(DATA_INDEX)} entries.")
 
             await websocket.send_json({
                 "type": "system",
