@@ -101,9 +101,13 @@ async def websocket_endpoint(websocket: WebSocket):
 
     async with httpx.AsyncClient() as http:
         try:
+            # Master prompt
+            with open("/Users/max/Codebase/github/ai-llm-agents-secretary-v2/llm/prompts/secretary_prompt.txt") as f:
+                master_prompt = f.read()
+
             await http.post(f"{CTX_SERVER}/master_prompt", json={
                 "session_id": SESSION_ID,
-                "text": "You are a capable AI secretary. Use tools to satisfy requests."
+                "text": master_prompt
             })
 
             # Routes dictionary to the dedicated data_index array in JSON

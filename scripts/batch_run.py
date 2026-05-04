@@ -57,11 +57,17 @@ async def initialize_session(t_manager: ToolManager) -> str:
     print(f"\n--- INITIALIZING CONTEXT SESSION: {session_id} ---")
 
     async with httpx.AsyncClient() as http:
-        # Master prompt
-        await http.post(f"{CTX_SERVER}/master_prompt", json={
-            "session_id": session_id,
-            "text": "You are a capable AI secretary. Use tools to satisfy requests."
-        })
+        # Use .read() instead of .readlines() to get a single string
+        with open("/Users/max/Codebase/github/ai-llm-agents-secretary-v2/llm/prompts/secretary_prompt.txt") as f:
+            master_prompt = f.read()
+
+        await http.post(
+            f"{CTX_SERVER}/master_prompt",
+            json={
+                "session_id": session_id,
+                "text": master_prompt
+            }
+        )
 
         # Data index
         await http.post(f"{CTX_SERVER}/data_index", json={
@@ -82,7 +88,6 @@ async def initialize_session(t_manager: ToolManager) -> str:
 
 async def process_query(session_id: str, user_text: str, t_manager: ToolManager, llm_client: AsyncOpenAI) -> str:
     """Runs the ReAct loop for a single query and returns the final answer."""
-    # Step A: Register User Message
     async with httpx.AsyncClient() as http:
         resp = await http.post(f"{CTX_SERVER}/message", json={
             "session_id": session_id,
@@ -93,22 +98,17 @@ async def process_query(session_id: str, user_text: str, t_manager: ToolManager,
 
     final_answer = ""
 
-    # --- AGENT REACT LOOP ---
     while True:
-        # Step B: Fetch Compiled Context Ledger
         async with httpx.AsyncClient() as http:
             ctx_resp = await http.get(f"{CTX_SERVER}/assemble/{session_id}")
             current_messages = ctx_resp.json()["messages"]
 
-        # --- ANTI-PREFILL FIX ---
         if current_messages and current_messages[-1].get("role") != "user":
             current_messages.append({
                 "role": "user",
                 "content": "Action completed. Please evaluate the context and continue."
             })
-        # ------------------------
 
-        # Step C: LLM Stream
         schemas = t_manager.get_schemas()
         response = await llm_client.chat.completions.create(
             model="local-model",
@@ -142,7 +142,6 @@ async def process_query(session_id: str, user_text: str, t_manager: ToolManager,
                     if tc.function.arguments:
                         tool_calls[idx]["arguments"] += tc.function.arguments
 
-        # Step D: Log Assistant Reply & Ensure Tool Intent is Recorded
         assistant_log = turn_content
         if tool_calls:
             for tc in tool_calls.values():
@@ -158,13 +157,10 @@ async def process_query(session_id: str, user_text: str, t_manager: ToolManager,
                 })
                 assistant_msg_id = resp.json()["id"]
 
-        # Step E: Handle Completion or Tools
         if not tool_calls:
-            # Reached final answer
             final_answer = turn_content
             break
 
-        # Execute Tools
         for tc in tool_calls.values():
             tool_name = tc["name"]
             print(f"  [EXE] Calling {tool_name}...")
@@ -183,6 +179,21 @@ async def process_query(session_id: str, user_text: str, t_manager: ToolManager,
                 )
 
     return final_answer
+
+
+async def save_context_png(session_id: str):
+    """Triggers the context server to render and save the context map PNG to its default location."""
+    print(f"  📸 Generating context map PNG...")
+    async with httpx.AsyncClient() as http:
+        try:
+            resp = await http.post(f"{CTX_SERVER}/save_png", json={
+                "session_id": session_id
+            })
+            resp.raise_for_status()
+            data = resp.json()
+            print(f"  ✅ PNG saved to: {data.get('filepath')}")
+        except Exception as e:
+            print(f"  ❌ Failed to save PNG: {e}")
 
 
 async def run_batch(input_csv_path: str, output_csv_path: str, query_column_name: str = "query"):
@@ -212,19 +223,19 @@ async def run_batch(input_csv_path: str, output_csv_path: str, query_column_name
         for row_index, row in enumerate(reader, start=1):
             query = row.get(query_column_name, "").strip()
             if not query:
-                print(f"Skipping empty row {row_index}...")
                 continue
 
             print(f"\n[{row_index}] Processing Query: {query}")
 
-            # Init fresh context for this query
             session_id = await initialize_session(t_manager)
-
             start_time = time.time()
 
             try:
-                # Run the ReAct agent loop
                 answer = await process_query(session_id, query, t_manager, llm_client)
+
+                # --- NEW: Save PNG upon successful completion without passing paths ---
+                await save_context_png(session_id)
+
             except Exception as e:
                 print(f"❌ Error processing row {row_index}: {e}")
                 answer = f"ERROR: {str(e)}"

@@ -20,7 +20,6 @@
         .segment:last-child { border-right: none; }
 
         .export-controls { margin-top: 15px; display: flex; align-items: center; gap: 10px; }
-        .export-input { padding: 6px; width: 250px; border: 1px solid #d1d5db; border-radius: 4px; }
         .export-btn { padding: 6px 12px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
         .export-btn:hover { background: #2563eb; }
         #png-status { font-size: 0.9em; font-weight: bold; }
@@ -81,8 +80,7 @@
 
             <h3>Export Graph</h3>
             <div class="export-controls">
-                <input type="text" id="png-folder-path" class="export-input" placeholder="Folder Path (e.g., ./exports)" value="./exports">
-                <button id="btn-save-png" class="export-btn">Save as PNG</button>
+                <button id="btn-save-png" class="export-btn">Save to Snapshots</button>
                 <span id="png-status"></span>
             </div>
         </div>

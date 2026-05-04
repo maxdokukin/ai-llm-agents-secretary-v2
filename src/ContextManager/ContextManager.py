@@ -40,7 +40,7 @@ class ContextManager:
         }
 
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.session_dir = os.path.join(os.getcwd(), "../", "../", "data", "contexts", f"{timestamp}_{self.session_id}")
+        self.session_dir = os.path.join(os.getcwd(), "../", "../", "llm", "contexts", f"{timestamp}_{self.session_id}")
         os.makedirs(self.session_dir, exist_ok=True)
         self.state_file = os.path.join(self.session_dir, "context.json")
         self.log_file = os.path.join(self.session_dir, "context.log")
@@ -190,10 +190,10 @@ class ContextManager:
         used = len(json.dumps(self.get_context()))
         return {"used": used, "free": max(0, self.max_context_size - used), "max": self.max_context_size}
 
-    def save_context_as_png(self, folder_path: str, usage_counts: Optional[Dict[str, int]] = None,
+    def save_context_as_png(self, usage_counts: Optional[Dict[str, int]] = None,
                             max_size: Optional[int] = None) -> str:
         """
-        Renders and saves the current context utilization bar graph as a highly stylized PNG.
+        Renders and saves the current context utilization bar graph to the session's snapshots directory.
         """
         try:
             import matplotlib
@@ -210,14 +210,11 @@ class ContextManager:
             labels = ['master', 'tools', 'results', 'index', 'data', 'user', 'assistant']
             values = [counts.get(l, 0) for l in labels]
 
-            # Refined, highly distinct color palette
             colors = ['#64748b', '#f59e0b', '#10b981', '#a855f7', '#ec4899', '#3b82f6', '#14b8a6']
 
-            # Taller layout to prevent squishing
             fig, ax = plt.subplots(figsize=(12, 3.5))
             left = 0
 
-            # Plot segments with borders for better contrast
             for label, value, color in zip(labels, values, colors):
                 if value > 0:
                     ax.barh(['Context Utilization'], [value], left=left, color=color, label=label.capitalize(),
@@ -229,32 +226,32 @@ class ContextManager:
                 ax.barh(['Context Utilization'], [free_space], left=left, color='#e2e8f0', label='Free',
                         edgecolor='white', linewidth=1)
 
-            # Clean styling
             ax.set_xlim(0, max_val)
             ax.set_title(f"Session Context: {self.session_id}", pad=20, fontsize=14, fontweight='bold', color='#334155')
             ax.set_xlabel("Characters Consumed", labelpad=10, fontsize=12, color='#475569')
 
-            # Remove y-axis and top/right spines
             ax.set_yticks([])
             ax.spines['top'].set_visible(False)
             ax.spines['right'].set_visible(False)
             ax.spines['left'].set_visible(False)
             ax.spines['bottom'].set_color('#cbd5e1')
 
-            # Add commas to x-axis
             ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: f"{int(x):,}"))
             ax.tick_params(axis='x', colors='#64748b', labelsize=11)
 
-            # Nicer legend formatting (4 columns)
             ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.3), ncol=4, frameon=False, fontsize=11)
 
             plt.tight_layout()
 
-            os.makedirs(folder_path, exist_ok=True)
-            filename = f"context_usage_{self.session_id}_{int(time.time())}.png"
-            filepath = os.path.join(folder_path, filename)
+            # Create snapshots directory within the specific session directory
+            snapshots_dir = os.path.join(self.session_dir, "snapshots")
+            os.makedirs(snapshots_dir, exist_ok=True)
 
-            # Slightly off-white background to make bars pop
+            # Generate the date_time filename
+            timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"{timestamp_str}.png"
+            filepath = os.path.join(snapshots_dir, filename)
+
             plt.savefig(filepath, bbox_inches="tight", dpi=200, facecolor='#f8fafc')
             plt.close()
 

@@ -136,7 +136,6 @@ class MessagePayload(BaseModel):
 
 class PngPayload(BaseModel):
     session_id: str = "default"
-    folder_path: str
 
 
 # --- UI ROUTES ---
@@ -232,11 +231,9 @@ async def get_stats(session_id: str):
 @app.post("/api/context/save_png")
 async def save_png(payload: PngPayload):
     try:
-        # Get usage so the PNG mirrors the exact math from the frontend
         usage_data = calculate_usage(payload.session_id)
         cm = get_cm(payload.session_id)
         filepath = cm.save_context_as_png(
-            folder_path=payload.folder_path,
             usage_counts=usage_data["counts"],
             max_size=usage_data["max"]
         )

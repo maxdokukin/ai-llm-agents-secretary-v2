@@ -49,7 +49,6 @@ async function updateDashboard() {
 
         const messages = contextData.messages || [];
 
-        // STRICTLY reads from the API now. No hardcoded frontend constants.
         const max = usage.max || 128000;
         const counts = usage.counts || {};
 
@@ -105,9 +104,8 @@ async function updateDashboard() {
     }
 }
 
-// PNG Export Logic
+// PNG Export Logic (Removed folderPath input retrieval)
 document.getElementById('btn-save-png').addEventListener('click', async () => {
-    const folderPath = document.getElementById('png-folder-path').value;
     const statusEl = document.getElementById('png-status');
     statusEl.innerText = "Saving...";
     statusEl.style.color = "#111827";
@@ -116,12 +114,12 @@ document.getElementById('btn-save-png').addEventListener('click', async () => {
         const res = await fetch('/api/context/save_png', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ session_id: SESSION_ID, folder_path: folderPath })
+            body: JSON.stringify({ session_id: SESSION_ID })
         });
         const data = await res.json();
 
         if (res.ok && data.status === 'success') {
-            statusEl.innerText = `Saved to: ${data.filepath}`;
+            statusEl.innerText = `Saved successfully!`;
             statusEl.style.color = "#10b981";
         } else {
             statusEl.innerText = `Error: ${data.detail || 'Failed to save'}`;
