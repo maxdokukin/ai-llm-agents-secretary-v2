@@ -25,6 +25,7 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 from src.ToolManager.ToolManager import ToolManager
 
 CTX_SERVER = "http://localhost:7999/api/context"
+LLM_SERVER = "http://localhost:8080/v1"
 SESSION_ID = f"session_{uuid.uuid4().hex[:8]}"
 
 # --- Sample Data Index ---
@@ -93,7 +94,7 @@ async def websocket_endpoint(websocket: WebSocket):
     t_manager = ToolManager(toolbox_dir="../src/ToolManager/toolbox")
 
     # 2. LLM Inference Client
-    llm_client = AsyncOpenAI(base_url="http://localhost:8080/v1", api_key="sk-local")
+    llm_client = AsyncOpenAI(base_url=LLM_SERVER, api_key="sk-local")
 
     # 3. Bootstrap Context Server
     print(f"\n--- INITIALIZING CONTEXT SESSION: {SESSION_ID} ---")
