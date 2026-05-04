@@ -11,6 +11,67 @@ body {
     text-shadow: 0 0 5px #00FF41;
 }
 
+/* --- Loader Overlay Styles --- */
+#loader-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: #030303;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    transition: opacity 0.8s ease-out, visibility 0.8s ease-out;
+}
+
+#loader-overlay.hidden {
+    opacity: 0;
+    visibility: hidden;
+}
+
+.loader-content {
+    font-size: 1.5em;
+    color: #00FF41;
+    display: flex;
+    gap: 15px;
+    align-items: center;
+}
+
+#ascii-spinner {
+    font-weight: bold;
+    color: #008F11;
+}
+
+/* Continuous Progress Bar */
+.loader-progress-container {
+    width: 300px;
+    height: 8px;
+    background-color: #001100;
+    border: 1px solid #004d09;
+    margin-top: 20px;
+    position: relative;
+    overflow: hidden;
+}
+
+.loader-progress-bar {
+    width: 40%;
+    height: 100%;
+    background-color: #00FF41;
+    box-shadow: 0 0 8px #00FF41;
+    position: absolute;
+    left: -40%;
+    animation: matrixSwipe 1.2s infinite linear;
+}
+
+@keyframes matrixSwipe {
+    0% { left: -40%; }
+    100% { left: 100%; }
+}
+/* ----------------------------- */
+
 #chat-container {
     flex-grow: 1;
     overflow-y: auto;
@@ -39,6 +100,41 @@ body {
 
 .stats-msg { color: #008F11; opacity: 0.6; font-size: 0.9em; margin-top: 5px; }
 
+/* --- Encryption Scramble Styles --- */
+.encryption-container {
+    margin-bottom: 15px;
+    border-left: 2px solid #4d0000;
+    padding-left: 15px;
+    background: linear-gradient(90deg, rgba(143, 17, 17, 0.05) 0%, rgba(0,0,0,0) 100%);
+    display: flex;
+    flex-direction: column;
+    max-height: 50px;
+    overflow: hidden;
+    transition: opacity 0.5s ease-out, max-height 0.5s ease-out, margin 0.5s ease-out, padding 0.5s ease-out;
+}
+
+.encryption-header {
+    color: #4d0000;
+    font-size: 0.85em;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    white-space: pre;
+    text-shadow: none; /* Stripping glow here too just in case */
+}
+
+.encryption-label::before {
+    content: ">> [ENCRYPTING] ";
+}
+
+.scramble-text {
+    color: #FF0000;
+    text-shadow: 0 0 5px #FF0000;
+    letter-spacing: 2px;
+}
+/* ------------------------------------------- */
+
 /* --- Matrix Thinking Styles --- */
 .thinking-container {
     margin-bottom: 15px;
@@ -55,10 +151,14 @@ body {
     user-select: none;
     display: flex;
     align-items: center;
-    transition: color 0.3s;
+    transition: color 0.3s, text-shadow 0.3s;
+    text-shadow: none; /* FIX: Removes the overpowering global glow */
 }
 
-.thinking-header:hover { color: #008F11; }
+.thinking-header:hover {
+    color: #008F11;
+    text-shadow: 0 0 3px #008F11; /* Adds a subtle, matching hover glow */
+}
 
 .thinking-header::before {
     content: "[+] DECRYPTING LOGIC PROTOCOLS...";
@@ -128,7 +228,7 @@ body {
     color: #008F11;
     font-size: 0.85em;
     white-space: pre-wrap;
-    word-wrap: break-word;
+    word-break: break-all;
 }
 
 #input-container {

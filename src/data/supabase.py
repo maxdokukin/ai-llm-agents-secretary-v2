@@ -34,18 +34,18 @@ def fetch_db_index() -> dict:
         definitions = openapi_spec.get("definitions", {})
 
         # 2. Define the tables and the exact columns needed for the index
-        tables_config = {
-            "classes": ["name"],
-            "projects": ["title", "short_description", "skills", "software_skills", "data_skills", "frameworks", "ranking", "slug"],
-            "works": ["title", "employer", "short_description", "skills", "frameworks", "ranking", "slug"],
-            "educations": ["location", "title", "subtitle"]
-        }
         # tables_config = {
-        #     "classes": ["slug"],
-        #     "projects": ["title", "short_description", "skills", "ranking", "slug"],
+        #     "classes": ["name"],
+        #     "projects": ["title", "short_description", "skills", "software_skills", "data_skills", "frameworks", "ranking", "slug"],
         #     "works": ["title", "employer", "short_description", "skills", "frameworks", "ranking", "slug"],
         #     "educations": ["location", "title", "subtitle"]
         # }
+        tables_config = {
+            "classes": ["slug"],
+            "projects": ["slug"],
+            "works": ["slug"],
+            "educations": ["slug"]
+        }
 
         output = {
             "table_schema": {},

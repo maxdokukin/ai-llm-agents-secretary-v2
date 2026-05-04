@@ -1,19 +1,125 @@
 const chatContainer = document.getElementById('chat-container');
 const userInput = document.getElementById('user-input');
+const loaderOverlay = document.getElementById('loader-overlay');
+const asciiSpinner = document.getElementById('ascii-spinner');
 
 let currentAgentDiv = null;
 let currentThinkingDiv = null;
 let currentThinkingContentDiv = null;
 let currentProgressBar = null;
+let currentEncryptionDiv = null;
 let thinkingTokenCount = 0;
+
+let scrambleInterval = null;
+const SCRAMBLE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@$%&*+-<>?~';
+const SCRAMBLE_LENGTH = 45;
+
+// --- Loading Animation Logic ---
+const frames = ["|", "/", "-", "\\"];
+let frameIndex = 0;
+const spinnerInterval = setInterval(() => {
+    frameIndex = (frameIndex + 1) % frames.length;
+    asciiSpinner.textContent = frames[frameIndex];
+}, 120);
+// ------------------------------------
 
 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+
+function solveScramble(container) {
+    if (scrambleInterval) clearInterval(scrambleInterval);
+    const targetSpan = container.querySelector('.scramble-text');
+    let solvedIndex = 0;
+
+    const solveInterval = setInterval(() => {
+        if (solvedIndex >= SCRAMBLE_LENGTH) {
+            clearInterval(solveInterval);
+
+            setTimeout(() => {
+                container.style.opacity = "0";
+                container.style.maxHeight = "0px";
+                container.style.marginBottom = "0px";
+                container.style.paddingLeft = "0px";
+                container.style.borderLeftWidth = "0px";
+                setTimeout(() => container.remove(), 500);
+            }, 300);
+            return;
+        }
+
+        let text = '';
+        for (let i = 0; i < SCRAMBLE_LENGTH; i++) {
+            if (i <= solvedIndex) {
+                text += '#';
+            } else {
+                text += SCRAMBLE_CHARS.charAt(Math.floor(Math.random() * SCRAMBLE_CHARS.length));
+            }
+        }
+        targetSpan.textContent = text;
+        solvedIndex += 3;
+    }, 30);
+}
+
+// Clean visual sweep to encrypt the reasoning blocks without jitter
+function closeThinkingBlock(container) {
+    const contentDiv = container.querySelector('.thinking-content');
+    const targetHeader = container.querySelector('.thinking-header');
+    const targetContentWrapper = container.querySelector('.thinking-content-wrapper');
+    const targetProgress = container.querySelector('.progress-wrapper');
+
+    if (!contentDiv) return;
+
+    const originalText = contentDiv.textContent;
+    const len = originalText.length;
+
+    if (len === 0) {
+        if (targetHeader) targetHeader.classList.remove('expanded');
+        if (targetContentWrapper) targetContentWrapper.classList.remove('expanded');
+        if (targetProgress) targetProgress.classList.remove('expanded');
+        return;
+    }
+
+    let solvedIndex = 0;
+    // Scale sweep speed based on block length so it always finishes in ~600ms
+    const sweepSpeed = Math.max(Math.floor(len / 20), 5);
+
+    const encryptInterval = setInterval(() => {
+        if (solvedIndex >= len) {
+            clearInterval(encryptInterval);
+            contentDiv.textContent = '#'.repeat(len);
+
+            // Hold the fully encrypted '#' state for a beat before collapsing
+            setTimeout(() => {
+                if (targetHeader) targetHeader.classList.remove('expanded');
+                if (targetContentWrapper) targetContentWrapper.classList.remove('expanded');
+                if (targetProgress) targetProgress.classList.remove('expanded');
+            }, 500);
+            return;
+        }
+
+        // Clean replacement: Hashes on the left, original text on the right. No random movement.
+        const solvedPart = '#'.repeat(solvedIndex);
+        const remainPart = originalText.substring(solvedIndex);
+
+        contentDiv.textContent = solvedPart + remainPart;
+        solvedIndex += sweepSpeed;
+
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }, 30);
+}
 
 ws.onmessage = function(event) {
     const data = JSON.parse(event.data);
 
     if (data.type === "system") {
+
+        if (data.content.includes("[CONNECTED]") && !loaderOverlay.classList.contains('hidden')) {
+            clearInterval(spinnerInterval);
+            loaderOverlay.classList.add('hidden');
+            userInput.disabled = false;
+            userInput.placeholder = "Awaiting command...";
+            userInput.focus();
+        }
+
         const div = document.createElement('div');
         div.className = 'message tool-msg';
         div.textContent = data.content;
@@ -24,6 +130,12 @@ ws.onmessage = function(event) {
         currentThinkingDiv = null;
 
     } else if (data.type === "agent_thinking_chunk") {
+
+        if (currentEncryptionDiv) {
+            solveScramble(currentEncryptionDiv);
+            currentEncryptionDiv = null;
+        }
+
         if (!currentThinkingDiv) {
             currentThinkingDiv = document.createElement('div');
             currentThinkingDiv.className = 'thinking-container';
@@ -37,7 +149,6 @@ ws.onmessage = function(event) {
             currentProgressBar.className = 'progress-bar';
             progressWrapper.appendChild(currentProgressBar);
 
-            // Using wrapper for native Grid animation
             const contentWrapper = document.createElement('div');
             contentWrapper.className = 'thinking-content-wrapper expanded';
 
@@ -76,19 +187,15 @@ ws.onmessage = function(event) {
 
     } else if (data.type === "agent_chunk") {
 
+        if (currentEncryptionDiv) {
+            solveScramble(currentEncryptionDiv);
+            currentEncryptionDiv = null;
+        }
+
         if (currentProgressBar && !currentProgressBar.classList.contains('complete')) {
             currentProgressBar.classList.add('complete');
-
-            // Secure references to elements in the specific container before timeout fires
-            const targetHeader = currentThinkingDiv.querySelector('.thinking-header');
-            const targetContentWrapper = currentThinkingDiv.querySelector('.thinking-content-wrapper');
-            const targetProgress = currentThinkingDiv.querySelector('.progress-wrapper');
-
-            setTimeout(() => {
-                if (targetHeader) targetHeader.classList.remove('expanded');
-                if (targetContentWrapper) targetContentWrapper.classList.remove('expanded');
-                if (targetProgress) targetProgress.classList.remove('expanded');
-            }, 600);
+            // Trigger the massive block encrypt animation
+            closeThinkingBlock(currentThinkingDiv);
         }
 
         if (!currentAgentDiv) {
@@ -134,6 +241,32 @@ userInput.addEventListener('keypress', function(e) {
             currentProgressBar.classList.add('complete');
             currentProgressBar = null;
         }
+
+        currentEncryptionDiv = document.createElement('div');
+        currentEncryptionDiv.className = 'encryption-container';
+
+        const header = document.createElement('div');
+        header.className = 'encryption-header';
+
+        const label = document.createElement('span');
+        label.className = 'encryption-label';
+
+        const scrambleText = document.createElement('span');
+        scrambleText.className = 'scramble-text';
+
+        header.appendChild(label);
+        header.appendChild(scrambleText);
+        currentEncryptionDiv.appendChild(header);
+        chatContainer.appendChild(currentEncryptionDiv);
+
+        if (scrambleInterval) clearInterval(scrambleInterval);
+        scrambleInterval = setInterval(() => {
+            let rndText = '';
+            for (let i = 0; i < SCRAMBLE_LENGTH; i++) {
+                rndText += SCRAMBLE_CHARS.charAt(Math.floor(Math.random() * SCRAMBLE_CHARS.length));
+            }
+            scrambleText.textContent = rndText;
+        }, 50);
 
         chatContainer.scrollTop = chatContainer.scrollHeight;
     }

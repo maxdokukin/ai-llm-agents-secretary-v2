@@ -7,10 +7,20 @@
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+    <div id="loader-overlay">
+        <div class="loader-content">
+            <span id="ascii-spinner">|</span>
+            <span id="loader-text">Fetching data index...</span>
+        </div>
+        <div class="loader-progress-container">
+            <div class="loader-progress-bar"></div>
+        </div>
+    </div>
+
     <div id="chat-container"></div>
     <div id="input-container">
         <span id="prompt">ROOT@SYSTEM:~$</span>
-        <input type="text" id="user-input" autocomplete="off" autofocus placeholder="Awaiting command...">
+        <input type="text" id="user-input" autocomplete="off" disabled placeholder="Establishing neural link...">
     </div>
 
     <script src="/static/script.js"></script>
