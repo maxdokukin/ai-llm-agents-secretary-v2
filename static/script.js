@@ -7,7 +7,6 @@ let currentThinkingContentDiv = null;
 let currentProgressBar = null;
 let thinkingTokenCount = 0;
 
-// Setup WebSocket connection dynamically based on the current host
 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
 
@@ -38,18 +37,24 @@ ws.onmessage = function(event) {
             currentProgressBar.className = 'progress-bar';
             progressWrapper.appendChild(currentProgressBar);
 
+            // Using wrapper for native Grid animation
+            const contentWrapper = document.createElement('div');
+            contentWrapper.className = 'thinking-content-wrapper expanded';
+
             currentThinkingContentDiv = document.createElement('div');
-            currentThinkingContentDiv.className = 'thinking-content expanded';
+            currentThinkingContentDiv.className = 'thinking-content';
+
+            contentWrapper.appendChild(currentThinkingContentDiv);
 
             headerDiv.addEventListener('click', () => {
                 headerDiv.classList.toggle('expanded');
                 progressWrapper.classList.toggle('expanded');
-                currentThinkingContentDiv.classList.toggle('expanded');
+                contentWrapper.classList.toggle('expanded');
             });
 
             currentThinkingDiv.appendChild(headerDiv);
             currentThinkingDiv.appendChild(progressWrapper);
-            currentThinkingDiv.appendChild(currentThinkingContentDiv);
+            currentThinkingDiv.appendChild(contentWrapper);
             chatContainer.appendChild(currentThinkingDiv);
 
             thinkingTokenCount = 0;
@@ -63,25 +68,25 @@ ws.onmessage = function(event) {
         if (progressPercent === 0) {
             currentProgressBar.style.transition = 'none';
             currentProgressBar.style.width = '0%';
-            void currentProgressBar.offsetWidth; // Force CSS reflow
+            void currentProgressBar.offsetWidth;
             currentProgressBar.style.transition = 'width 0.1s linear';
         } else {
             currentProgressBar.style.width = progressPercent + '%';
         }
 
     } else if (data.type === "agent_chunk") {
-        // Lock progress bar and trigger smooth collapse
+
         if (currentProgressBar && !currentProgressBar.classList.contains('complete')) {
             currentProgressBar.classList.add('complete');
 
+            // Secure references to elements in the specific container before timeout fires
             const targetHeader = currentThinkingDiv.querySelector('.thinking-header');
-            const targetContent = currentThinkingContentDiv;
+            const targetContentWrapper = currentThinkingDiv.querySelector('.thinking-content-wrapper');
             const targetProgress = currentThinkingDiv.querySelector('.progress-wrapper');
 
-            // Delay before auto-fade so user sees 100% completion
             setTimeout(() => {
                 if (targetHeader) targetHeader.classList.remove('expanded');
-                if (targetContent) targetContent.classList.remove('expanded');
+                if (targetContentWrapper) targetContentWrapper.classList.remove('expanded');
                 if (targetProgress) targetProgress.classList.remove('expanded');
             }, 600);
         }

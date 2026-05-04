@@ -30,10 +30,6 @@ SESSION_ID = f"session_{uuid.uuid4().hex[:8]}"
 
 # --- Sample Data Index ---
 from src.data.supabase import fetch_db_index
-# DATA_INDEX = {
-#     "user.name": "max dokukin",
-#     "user.email": "maxdokukin@icloud.com",
-# }
 
 
 @app.get("/")
@@ -42,9 +38,6 @@ async def get_index():
 
 
 def tool_returns_data(t_manager: ToolManager, tool_name: str) -> bool:
-    """
-    Returns whether a registered tool is a data-returning tool.
-    """
     if hasattr(t_manager, "tool_returns_data"):
         return bool(t_manager.tool_returns_data.get(tool_name, False))
 
@@ -57,19 +50,15 @@ def tool_returns_data(t_manager: ToolManager, tool_name: str) -> bool:
 
 
 async def append_tool_result_to_context(
-    http: httpx.AsyncClient,
-    *,
-    session_id: str,
-    tool_name: str,
-    result: str,
-    associated_id: str,
-    returns_data: bool,
+        http: httpx.AsyncClient,
+        *,
+        session_id: str,
+        tool_name: str,
+        result: str,
+        associated_id: str,
+        returns_data: bool,
 ) -> None:
-    """
-    Routes tool output into the correct context bucket.
-    """
     if returns_data:
-        # Routes to the dedicated fetched_data array in JSON
         await http.post(f"{CTX_SERVER}/fetched_data", json={
             "session_id": session_id,
             "tool_name": tool_name,
@@ -77,7 +66,6 @@ async def append_tool_result_to_context(
             "associated_id": associated_id
         })
     else:
-        # Routes to the dedicated tool_results array in JSON
         await http.post(f"{CTX_SERVER}/tool_results", json={
             "session_id": session_id,
             "tool_name": tool_name,
@@ -90,18 +78,13 @@ async def append_tool_result_to_context(
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
 
-    # 1. Init Local Tool Discovery
     t_manager = ToolManager(toolbox_dir="../src/ToolManager/toolbox")
-
-    # 2. LLM Inference Client
     llm_client = AsyncOpenAI(base_url=LLM_SERVER, api_key="sk-local")
 
-    # 3. Bootstrap Context Server
     print(f"\n--- INITIALIZING CONTEXT SESSION: {SESSION_ID} ---")
 
     async with httpx.AsyncClient() as http:
         try:
-            # Master prompt
             with open("/Users/max/Codebase/github/ai-llm-agents-secretary-v2/llm/prompts/secretary_prompt.txt") as f:
                 master_prompt = f.read()
 
@@ -110,7 +93,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 "text": master_prompt
             })
 
-            # Routes dictionary to the dedicated data_index array in JSON
             await http.post(f"{CTX_SERVER}/data_index", json={
                 "session_id": SESSION_ID,
                 "index_data": fetch_db_index(),
@@ -125,7 +107,6 @@ async def websocket_endpoint(websocket: WebSocket):
 
             print(f"✅ Context {SESSION_ID} successfully initialized on Port 7999.")
             print(f"🛠️  Registered {len(schemas)} tools.")
-            # print(f"📇 Loaded data index with {len(DATA_INDEX)} entries.")
 
             await websocket.send_json({
                 "type": "system",
@@ -144,7 +125,6 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             user_text = await websocket.receive_text()
 
-            # Step A: Register User Message
             async with httpx.AsyncClient() as http:
                 resp = await http.post(f"{CTX_SERVER}/message", json={
                     "session_id": SESSION_ID,
@@ -153,23 +133,17 @@ async def websocket_endpoint(websocket: WebSocket):
                 })
                 user_msg_id = resp.json()["id"]
 
-            # --- AGENT REACT LOOP ---
             while True:
-                # Step B: Fetch Compiled Context Ledger
                 async with httpx.AsyncClient() as http:
                     ctx_resp = await http.get(f"{CTX_SERVER}/assemble/{SESSION_ID}")
                     current_messages = ctx_resp.json()["messages"]
 
-                # --- ANTI-PREFILL FIX ---
-                # Now ensures the LLM gets the microphone back even after inline system logs
                 if current_messages and current_messages[-1].get("role") != "user":
                     current_messages.append({
                         "role": "user",
                         "content": "Action completed. Please evaluate the context and continue."
                     })
-                # ------------------------
 
-                # Step C: LLM Stream
                 schemas = t_manager.get_schemas()
                 response = await llm_client.chat.completions.create(
                     model="local-model",
@@ -180,6 +154,8 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 turn_content = ""
                 tool_calls = {}
+                is_thinking = False
+                has_native_reasoning = False
 
                 async for chunk in response:
                     if not chunk.choices:
@@ -187,13 +163,53 @@ async def websocket_endpoint(websocket: WebSocket):
 
                     delta = chunk.choices[0].delta
 
-                    if delta.content:
-                        turn_content += delta.content
+                    # 1. Handle Native API Reasoning (DeepSeek API format)
+                    reasoning = getattr(delta, "reasoning_content", None)
+                    if reasoning:
+                        if not has_native_reasoning:
+                            turn_content += "<think>\n"
+                            has_native_reasoning = True
+                        turn_content += reasoning
                         await websocket.send_json({
-                            "type": "agent_chunk",
-                            "content": delta.content
+                            "type": "agent_thinking_chunk",
+                            "content": reasoning
                         })
 
+                    # 2. Handle Text Content and Legacy <think> tags
+                    if delta.content:
+                        if has_native_reasoning and not is_thinking:
+                            turn_content += "\n</think>\n"
+                            has_native_reasoning = False
+
+                        content_piece = delta.content
+                        turn_content += content_piece
+
+                        if "<think>" in content_piece:
+                            is_thinking = True
+                            content_piece = content_piece.replace("<think>", "")
+
+                        if "</think>" in content_piece:
+                            is_thinking = False
+                            content_piece = content_piece.replace("</think>", "")
+                            if content_piece.strip():
+                                await websocket.send_json({
+                                    "type": "agent_chunk",
+                                    "content": content_piece
+                                })
+                            continue
+
+                        if is_thinking:
+                            await websocket.send_json({
+                                "type": "agent_thinking_chunk",
+                                "content": content_piece
+                            })
+                        else:
+                            await websocket.send_json({
+                                "type": "agent_chunk",
+                                "content": content_piece
+                            })
+
+                    # 3. Handle Tool Calls
                     if delta.tool_calls:
                         for tc in delta.tool_calls:
                             idx = tc.index
@@ -211,7 +227,6 @@ async def websocket_endpoint(websocket: WebSocket):
                             if tc.function.arguments:
                                 tool_calls[idx]["arguments"] += tc.function.arguments
 
-                # Step D: Log Assistant Reply & Ensure Tool Intent is Recorded
                 assistant_log = turn_content
                 if tool_calls:
                     for tc in tool_calls.values():
@@ -227,7 +242,6 @@ async def websocket_endpoint(websocket: WebSocket):
                         })
                         assistant_msg_id = resp.json()["id"]
 
-                # Step E: Handle Completion or Tools
                 if not tool_calls:
                     async with httpx.AsyncClient() as http:
                         stats = await http.get(f"{CTX_SERVER}/stats/{SESSION_ID}")
