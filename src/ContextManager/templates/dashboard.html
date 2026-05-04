@@ -4,6 +4,27 @@
     <meta charset="UTF-8">
     <title>Context: {{ session_id }}</title>
     <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+    <style>
+        /* Exact color mappings to mirror Matplotlib generation */
+        .bg-master { background-color: #64748b !important; }
+        .bg-tools { background-color: #f59e0b !important; }
+        .bg-results { background-color: #10b981 !important; }
+        .bg-index { background-color: #a855f7 !important; }
+        .bg-data { background-color: #ec4899 !important; }
+        .bg-user { background-color: #3b82f6 !important; }
+        .bg-assistant { background-color: #14b8a6 !important; }
+        .bg-free { background-color: #e2e8f0 !important; }
+
+        .ctx-bar { display: flex; height: 30px; border-radius: 6px; overflow: hidden; background: #e2e8f0; margin: 15px 0; }
+        .segment { height: 100%; transition: width 0.3s ease; border-right: 1px solid white; }
+        .segment:last-child { border-right: none; }
+
+        .export-controls { margin-top: 15px; display: flex; align-items: center; gap: 10px; }
+        .export-input { padding: 6px; width: 250px; border: 1px solid #d1d5db; border-radius: 4px; }
+        .export-btn { padding: 6px 12px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .export-btn:hover { background: #2563eb; }
+        #png-status { font-size: 0.9em; font-weight: bold; }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -47,40 +68,22 @@
             </div>
 
             <div class="legend">
-                <div class="legend-item">
-                    <span class="legend-swatch bg-master"></span>
-                    Master: <b id="count-master">0</b>
-                </div>
+                <div class="legend-item"><span class="legend-swatch bg-master"></span>Master: <b id="count-master">0</b></div>
+                <div class="legend-item"><span class="legend-swatch bg-tools"></span>Tools: <b id="count-tools">0</b></div>
+                <div class="legend-item"><span class="legend-swatch bg-results"></span>Tool Results: <b id="count-results">0</b></div>
+                <div class="legend-item"><span class="legend-swatch bg-index"></span>Data Index: <b id="count-index">0</b></div>
+                <div class="legend-item"><span class="legend-swatch bg-data"></span>Fetched Data: <b id="count-data">0</b></div>
+                <div class="legend-item"><span class="legend-swatch bg-user"></span>User Messages: <b id="count-user">0</b></div>
+                <div class="legend-item"><span class="legend-swatch bg-assistant"></span>Assistant Messages: <b id="count-assistant">0</b></div>
+            </div>
 
-                <div class="legend-item">
-                    <span class="legend-swatch bg-tools"></span>
-                    Tools: <b id="count-tools">0</b>
-                </div>
+            <hr style="margin: 20px 0; border: none; border-top: 1px solid #e5e7eb;">
 
-                <div class="legend-item">
-                    <span class="legend-swatch bg-results"></span>
-                    Tool Results: <b id="count-results">0</b>
-                </div>
-
-                <div class="legend-item">
-                    <span class="legend-swatch bg-index"></span>
-                    Data Index: <b id="count-index">0</b>
-                </div>
-
-                <div class="legend-item">
-                    <span class="legend-swatch bg-data"></span>
-                    Fetched Data: <b id="count-data">0</b>
-                </div>
-
-                <div class="legend-item">
-                    <span class="legend-swatch bg-user"></span>
-                    User Messages: <b id="count-user">0</b>
-                </div>
-
-                <div class="legend-item">
-                    <span class="legend-swatch bg-assistant"></span>
-                    Assistant Messages: <b id="count-assistant">0</b>
-                </div>
+            <h3>Export Graph</h3>
+            <div class="export-controls">
+                <input type="text" id="png-folder-path" class="export-input" placeholder="Folder Path (e.g., ./exports)" value="./exports">
+                <button id="btn-save-png" class="export-btn">Save as PNG</button>
+                <span id="png-status"></span>
             </div>
         </div>
 

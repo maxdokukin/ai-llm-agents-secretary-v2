@@ -4,7 +4,6 @@ function safePercent(value, max) {
     if (!max || max <= 0) {
         return 0;
     }
-
     return Math.max(0, Math.min(100, (value / max) * 100));
 }
 
@@ -105,6 +104,34 @@ async function updateDashboard() {
         badge.style.color = "#991b1b";
     }
 }
+
+// PNG Export Logic
+document.getElementById('btn-save-png').addEventListener('click', async () => {
+    const folderPath = document.getElementById('png-folder-path').value;
+    const statusEl = document.getElementById('png-status');
+    statusEl.innerText = "Saving...";
+    statusEl.style.color = "#111827";
+
+    try {
+        const res = await fetch('/api/context/save_png', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: SESSION_ID, folder_path: folderPath })
+        });
+        const data = await res.json();
+
+        if (res.ok && data.status === 'success') {
+            statusEl.innerText = `Saved to: ${data.filepath}`;
+            statusEl.style.color = "#10b981";
+        } else {
+            statusEl.innerText = `Error: ${data.detail || 'Failed to save'}`;
+            statusEl.style.color = "#ef4444";
+        }
+    } catch(e) {
+        statusEl.innerText = "Network Error";
+        statusEl.style.color = "#ef4444";
+    }
+});
 
 setInterval(updateDashboard, 2000);
 updateDashboard();

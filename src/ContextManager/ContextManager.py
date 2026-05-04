@@ -9,6 +9,7 @@ from typing import Dict, List, Any, Optional
 # --- ONE CONSTANT TO RULE THEM ALL ---
 MAX_CONTEXT_SIZE = 128000
 
+
 class ContextManager:
     def __init__(self, session_id: str = "default", max_context_size: int = MAX_CONTEXT_SIZE):
         self.session_id = session_id
@@ -188,3 +189,74 @@ class ContextManager:
     def calculate_free_space(self):
         used = len(json.dumps(self.get_context()))
         return {"used": used, "free": max(0, self.max_context_size - used), "max": self.max_context_size}
+
+    def save_context_as_png(self, folder_path: str, usage_counts: Optional[Dict[str, int]] = None,
+                            max_size: Optional[int] = None) -> str:
+        """
+        Renders and saves the current context utilization bar graph as a highly stylized PNG.
+        """
+        try:
+            import matplotlib
+            matplotlib.use('Agg')
+            import matplotlib.pyplot as plt
+            import matplotlib.ticker as ticker
+        except ImportError:
+            raise ImportError("matplotlib is required. Run `pip install matplotlib`.")
+
+        with self._lock:
+            counts = usage_counts if usage_counts is not None else self.session_usage.get(self.session_id, {})
+            max_val = max_size if max_size is not None else self.max_context_size
+
+            labels = ['master', 'tools', 'results', 'index', 'data', 'user', 'assistant']
+            values = [counts.get(l, 0) for l in labels]
+
+            # Refined, highly distinct color palette
+            colors = ['#64748b', '#f59e0b', '#10b981', '#a855f7', '#ec4899', '#3b82f6', '#14b8a6']
+
+            # Taller layout to prevent squishing
+            fig, ax = plt.subplots(figsize=(12, 3.5))
+            left = 0
+
+            # Plot segments with borders for better contrast
+            for label, value, color in zip(labels, values, colors):
+                if value > 0:
+                    ax.barh(['Context Utilization'], [value], left=left, color=color, label=label.capitalize(),
+                            edgecolor='white', linewidth=1)
+                    left += value
+
+            free_space = max(0, max_val - left)
+            if free_space > 0:
+                ax.barh(['Context Utilization'], [free_space], left=left, color='#e2e8f0', label='Free',
+                        edgecolor='white', linewidth=1)
+
+            # Clean styling
+            ax.set_xlim(0, max_val)
+            ax.set_title(f"Session Context: {self.session_id}", pad=20, fontsize=14, fontweight='bold', color='#334155')
+            ax.set_xlabel("Characters Consumed", labelpad=10, fontsize=12, color='#475569')
+
+            # Remove y-axis and top/right spines
+            ax.set_yticks([])
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['left'].set_visible(False)
+            ax.spines['bottom'].set_color('#cbd5e1')
+
+            # Add commas to x-axis
+            ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: f"{int(x):,}"))
+            ax.tick_params(axis='x', colors='#64748b', labelsize=11)
+
+            # Nicer legend formatting (4 columns)
+            ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.3), ncol=4, frameon=False, fontsize=11)
+
+            plt.tight_layout()
+
+            os.makedirs(folder_path, exist_ok=True)
+            filename = f"context_usage_{self.session_id}_{int(time.time())}.png"
+            filepath = os.path.join(folder_path, filename)
+
+            # Slightly off-white background to make bars pop
+            plt.savefig(filepath, bbox_inches="tight", dpi=200, facecolor='#f8fafc')
+            plt.close()
+
+            self._log_action("save_png", {"filepath": filepath})
+            return filepath
