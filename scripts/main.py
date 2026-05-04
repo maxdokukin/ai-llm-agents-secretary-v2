@@ -26,7 +26,6 @@ from src.ToolManager.ToolManager import ToolManager
 
 CTX_SERVER = "http://localhost:7999/api/context"
 LLM_SERVER = "http://localhost:8080/v1"
-SESSION_ID = f"session_{uuid.uuid4().hex[:8]}"
 
 # --- Sample Data Index ---
 from src.data.supabase import fetch_db_index
@@ -78,10 +77,13 @@ async def append_tool_result_to_context(
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
 
+    # Generate a fresh session ID for this specific WebSocket connection
+    session_id = f"session_{uuid.uuid4().hex[:8]}"
+
     t_manager = ToolManager(toolbox_dir="../src/ToolManager/toolbox")
     llm_client = AsyncOpenAI(base_url=LLM_SERVER, api_key="sk-local")
 
-    print(f"\n--- INITIALIZING CONTEXT SESSION: {SESSION_ID} ---")
+    print(f"\n--- INITIALIZING CONTEXT SESSION: {session_id} ---")
 
     async with httpx.AsyncClient() as http:
         try:
@@ -89,28 +91,28 @@ async def websocket_endpoint(websocket: WebSocket):
                 master_prompt = f.read()
 
             await http.post(f"{CTX_SERVER}/master_prompt", json={
-                "session_id": SESSION_ID,
+                "session_id": session_id,
                 "text": master_prompt
             })
 
             await http.post(f"{CTX_SERVER}/data_index", json={
-                "session_id": SESSION_ID,
+                "session_id": session_id,
                 "index_data": fetch_db_index(),
             })
 
             schemas = t_manager.get_schemas()
             for schema in schemas:
                 await http.post(f"{CTX_SERVER}/tools", json={
-                    "session_id": SESSION_ID,
+                    "session_id": session_id,
                     "tool_schema": schema
                 })
 
-            print(f"✅ Context {SESSION_ID} successfully initialized on Port 7999.")
+            print(f"✅ Context {session_id} successfully initialized on Port 7999.")
             print(f"🛠️  Registered {len(schemas)} tools.")
 
             await websocket.send_json({
                 "type": "system",
-                "content": f"[CONNECTED] Session ID: {SESSION_ID}"
+                "content": f"[CONNECTED] Session ID: {session_id}"
             })
 
         except httpx.ConnectError:
@@ -127,7 +129,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
             async with httpx.AsyncClient() as http:
                 resp = await http.post(f"{CTX_SERVER}/message", json={
-                    "session_id": SESSION_ID,
+                    "session_id": session_id,
                     "role": "user",
                     "content": user_text
                 })
@@ -135,7 +137,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
             while True:
                 async with httpx.AsyncClient() as http:
-                    ctx_resp = await http.get(f"{CTX_SERVER}/assemble/{SESSION_ID}")
+                    ctx_resp = await http.get(f"{CTX_SERVER}/assemble/{session_id}")
                     current_messages = ctx_resp.json()["messages"]
 
                 if current_messages and current_messages[-1].get("role") != "user":
@@ -236,7 +238,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 if assistant_log.strip():
                     async with httpx.AsyncClient() as http:
                         resp = await http.post(f"{CTX_SERVER}/message", json={
-                            "session_id": SESSION_ID,
+                            "session_id": session_id,
                             "role": "assistant",
                             "content": assistant_log.strip()
                         })
@@ -244,12 +246,12 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 if not tool_calls:
                     async with httpx.AsyncClient() as http:
-                        stats = await http.get(f"{CTX_SERVER}/stats/{SESSION_ID}")
+                        stats = await http.get(f"{CTX_SERVER}/stats/{session_id}")
                         s = stats.json()
 
                         await websocket.send_json({
                             "type": "stats",
-                            "content": f"Session: {SESSION_ID} | Context: {s['used']}/{s['max']} chars"
+                            "content": f"Session: {session_id} | Context: {s['used']}/{s['max']} chars"
                         })
 
                     await websocket.send_json({"type": "done"})
@@ -269,7 +271,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     async with httpx.AsyncClient() as http:
                         await append_tool_result_to_context(
                             http,
-                            session_id=SESSION_ID,
+                            session_id=session_id,
                             tool_name=tool_name,
                             result=result,
                             associated_id=assistant_msg_id or user_msg_id,
@@ -284,7 +286,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     })
 
     except WebSocketDisconnect:
-        print(f"Client disconnected from session: {SESSION_ID}")
+        print(f"Client disconnected from session: {session_id}")
 
 
 if __name__ == "__main__":
