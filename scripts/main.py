@@ -77,9 +77,7 @@ async def append_tool_result_to_context(
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
 
-    # Generate a fresh session ID for this specific WebSocket connection
     session_id = f"session_{uuid.uuid4().hex[:8]}"
-
     t_manager = ToolManager(toolbox_dir="../src/ToolManager/toolbox")
     llm_client = AsyncOpenAI(base_url=LLM_SERVER, api_key="sk-local")
 
@@ -90,37 +88,18 @@ async def websocket_endpoint(websocket: WebSocket):
             with open("/Users/max/Codebase/github/ai-llm-agents-secretary-v2/llm/prompts/secretary_prompt.txt") as f:
                 master_prompt = f.read()
 
-            await http.post(f"{CTX_SERVER}/master_prompt", json={
-                "session_id": session_id,
-                "text": master_prompt
-            })
-
-            await http.post(f"{CTX_SERVER}/data_index", json={
-                "session_id": session_id,
-                "index_data": fetch_db_index(),
-            })
+            await http.post(f"{CTX_SERVER}/master_prompt", json={"session_id": session_id, "text": master_prompt})
+            await http.post(f"{CTX_SERVER}/data_index", json={"session_id": session_id, "index_data": fetch_db_index()})
 
             schemas = t_manager.get_schemas()
             for schema in schemas:
-                await http.post(f"{CTX_SERVER}/tools", json={
-                    "session_id": session_id,
-                    "tool_schema": schema
-                })
+                await http.post(f"{CTX_SERVER}/tools", json={"session_id": session_id, "tool_schema": schema})
 
-            print(f"✅ Context {session_id} successfully initialized on Port 7999.")
-            print(f"🛠️  Registered {len(schemas)} tools.")
-
-            await websocket.send_json({
-                "type": "system",
-                "content": f"[CONNECTED] Session ID: {session_id}"
-            })
+            print(f"✅ Context {session_id} initialized. Registered {len(schemas)} tools.")
+            await websocket.send_json({"type": "system", "content": f"[CONNECTED] Session ID: {session_id}"})
 
         except httpx.ConnectError:
-            print(f"❌ FAILED to connect to Context Server at {CTX_SERVER}")
-            await websocket.send_json({
-                "type": "system",
-                "content": "❌ Error: Context Server (7999) is offline."
-            })
+            await websocket.send_json({"type": "system", "content": "❌ Error: Context Server (7999) is offline."})
             return
 
     try:
@@ -158,89 +137,107 @@ async def websocket_endpoint(websocket: WebSocket):
                 tool_calls = {}
                 is_thinking = False
                 has_native_reasoning = False
+                content_buffer = ""
 
                 async for chunk in response:
                     if not chunk.choices:
                         continue
 
+                    # --- RAW DEBUG PRINT ---
+                    print(f"DEBUG RAW CHUNK: {chunk}")
+
                     delta = chunk.choices[0].delta
 
-                    # 1. Handle Native API Reasoning (DeepSeek API format)
+                    # 1. Native Reasoning
                     reasoning = getattr(delta, "reasoning_content", None)
                     if reasoning:
                         if not has_native_reasoning:
                             turn_content += "<think>\n"
                             has_native_reasoning = True
-                        turn_content += reasoning
-                        await websocket.send_json({
-                            "type": "agent_thinking_chunk",
-                            "content": reasoning
-                        })
-
-                    # 2. Handle Text Content and Legacy <think> tags
-                    if delta.content:
-                        if has_native_reasoning and not is_thinking:
-                            turn_content += "\n</think>\n"
-                            has_native_reasoning = False
-
-                        content_piece = delta.content
-                        turn_content += content_piece
-
-                        if "<think>" in content_piece:
                             is_thinking = True
-                            content_piece = content_piece.replace("<think>", "")
+                        turn_content += reasoning
+                        await websocket.send_json({"type": "agent_thinking_chunk", "content": reasoning})
 
-                        if "</think>" in content_piece:
+                    # 2. Text Content & Tag Parsing
+                    if delta.content:
+                        if has_native_reasoning and is_thinking:
+                            turn_content += "\n</think>\n"
                             is_thinking = False
-                            content_piece = content_piece.replace("</think>", "")
-                            if content_piece.strip():
-                                await websocket.send_json({
-                                    "type": "agent_chunk",
-                                    "content": content_piece
-                                })
-                            continue
 
-                        if is_thinking:
-                            await websocket.send_json({
-                                "type": "agent_thinking_chunk",
-                                "content": content_piece
-                            })
-                        else:
-                            await websocket.send_json({
-                                "type": "agent_chunk",
-                                "content": content_piece
-                            })
+                        turn_content += delta.content
+                        content_buffer += delta.content
 
-                    # 3. Handle Tool Calls
+                        while True:
+                            if not is_thinking:
+                                idx = content_buffer.find("<think>")
+                                if idx != -1:
+                                    if idx > 0:
+                                        await websocket.send_json(
+                                            {"type": "agent_chunk", "content": content_buffer[:idx]})
+                                    content_buffer = content_buffer[idx + len("<think>"):]
+                                    is_thinking = True
+                                else:
+                                    lt_idx = content_buffer.rfind('<')
+                                    if lt_idx != -1 and "<think>".startswith(content_buffer[lt_idx:]):
+                                        if lt_idx > 0:
+                                            await websocket.send_json(
+                                                {"type": "agent_chunk", "content": content_buffer[:lt_idx]})
+                                        content_buffer = content_buffer[lt_idx:]
+                                    else:
+                                        if content_buffer:
+                                            await websocket.send_json(
+                                                {"type": "agent_chunk", "content": content_buffer})
+                                        content_buffer = ""
+                                    break
+                            else:
+                                idx = content_buffer.find("</think>")
+                                if idx != -1:
+                                    if idx > 0:
+                                        await websocket.send_json(
+                                            {"type": "agent_thinking_chunk", "content": content_buffer[:idx]})
+                                    content_buffer = content_buffer[idx + len("</think>"):]
+                                    is_thinking = False
+                                else:
+                                    lt_idx = content_buffer.rfind('<')
+                                    if lt_idx != -1 and "</think>".startswith(content_buffer[lt_idx:]):
+                                        if lt_idx > 0:
+                                            await websocket.send_json(
+                                                {"type": "agent_thinking_chunk", "content": content_buffer[:lt_idx]})
+                                        content_buffer = content_buffer[lt_idx:]
+                                    else:
+                                        if content_buffer:
+                                            await websocket.send_json(
+                                                {"type": "agent_thinking_chunk", "content": content_buffer})
+                                        content_buffer = ""
+                                    break
+
+                    # 3. Tool Calls
                     if delta.tool_calls:
                         for tc in delta.tool_calls:
                             idx = tc.index
-
                             if idx not in tool_calls:
-                                tool_calls[idx] = {
-                                    "id": tc.id,
-                                    "name": "",
-                                    "arguments": ""
-                                }
-
+                                tool_calls[idx] = {"id": tc.id, "name": "", "arguments": ""}
                             if tc.function.name:
                                 tool_calls[idx]["name"] += tc.function.name
-
                             if tc.function.arguments:
                                 tool_calls[idx]["arguments"] += tc.function.arguments
 
-                assistant_log = turn_content
-                if tool_calls:
-                    for tc in tool_calls.values():
-                        assistant_log += f"\n[Action: Executed tool '{tc['name']}' with args: {tc['arguments']}]"
+                # Post-stream cleanup
+                if content_buffer:
+                    msg_type = "agent_thinking_chunk" if is_thinking else "agent_chunk"
+                    await websocket.send_json({"type": msg_type, "content": content_buffer})
+
+                final_assistant_text = turn_content.strip()
+                if is_thinking and "</think>" not in final_assistant_text:
+                    final_assistant_text += "\n</think>"
 
                 assistant_msg_id = None
-                if assistant_log.strip():
+                if final_assistant_text:
                     async with httpx.AsyncClient() as http:
                         resp = await http.post(f"{CTX_SERVER}/message", json={
                             "session_id": session_id,
                             "role": "assistant",
-                            "content": assistant_log.strip()
+                            "content": final_assistant_text
                         })
                         assistant_msg_id = resp.json()["id"]
 
@@ -248,25 +245,22 @@ async def websocket_endpoint(websocket: WebSocket):
                     async with httpx.AsyncClient() as http:
                         stats = await http.get(f"{CTX_SERVER}/stats/{session_id}")
                         s = stats.json()
-
                         await websocket.send_json({
                             "type": "stats",
                             "content": f"Session: {session_id} | Context: {s['used']}/{s['max']} chars"
                         })
-
                     await websocket.send_json({"type": "done"})
                     break
 
+                # Execution
                 for tc in tool_calls.values():
                     tool_name = tc["name"]
+                    arguments = tc["arguments"]
                     returns_data = tool_returns_data(t_manager, tool_name)
 
-                    await websocket.send_json({
-                        "type": "system",
-                        "content": f"[EXE] Calling {tool_name}..."
-                    })
+                    await websocket.send_json({"type": "system", "content": f"[EXE] {tool_name}({arguments})"})
 
-                    result = str(t_manager.execute_tool(tool_name, tc["arguments"]))
+                    result = str(t_manager.execute_tool(tool_name, arguments))
 
                     async with httpx.AsyncClient() as http:
                         await append_tool_result_to_context(
@@ -278,15 +272,11 @@ async def websocket_endpoint(websocket: WebSocket):
                             returns_data=returns_data,
                         )
 
-                    destination = "fetched data" if returns_data else "tool results"
-
-                    await websocket.send_json({
-                        "type": "system",
-                        "content": f"[OK] {tool_name} appended to {destination}."
-                    })
+                    dest = "fetched data" if returns_data else "tool results"
+                    await websocket.send_json({"type": "system", "content": f"[OK] {tool_name} -> {dest}"})
 
     except WebSocketDisconnect:
-        print(f"Client disconnected from session: {session_id}")
+        print(f"Client disconnected: {session_id}")
 
 
 if __name__ == "__main__":

@@ -59,7 +59,8 @@ function solveScramble(container) {
     }, 30);
 }
 
-// Clean visual sweep to encrypt the reasoning blocks without jitter
+// --- Thinking Block Matrix Animations ---
+
 function closeThinkingBlock(container) {
     const contentDiv = container.querySelector('.thinking-content');
     const targetHeader = container.querySelector('.thinking-header');
@@ -67,8 +68,14 @@ function closeThinkingBlock(container) {
     const targetProgress = container.querySelector('.progress-wrapper');
 
     if (!contentDiv) return;
+    if (contentDiv._isAnimating) return;
 
-    const originalText = contentDiv.textContent;
+    // Cache original text securely in JS memory, bypassing DOM attributes
+    if (typeof contentDiv._originalText === 'undefined') {
+        contentDiv._originalText = contentDiv.textContent;
+    }
+
+    const originalText = contentDiv._originalText;
     const len = originalText.length;
 
     if (len === 0) {
@@ -78,8 +85,8 @@ function closeThinkingBlock(container) {
         return;
     }
 
+    contentDiv._isAnimating = true;
     let solvedIndex = 0;
-    // Scale sweep speed based on block length so it always finishes in ~600ms
     const sweepSpeed = Math.max(Math.floor(len / 20), 5);
 
     const encryptInterval = setInterval(() => {
@@ -87,16 +94,15 @@ function closeThinkingBlock(container) {
             clearInterval(encryptInterval);
             contentDiv.textContent = '#'.repeat(len);
 
-            // Hold the fully encrypted '#' state for a beat before collapsing
             setTimeout(() => {
                 if (targetHeader) targetHeader.classList.remove('expanded');
                 if (targetContentWrapper) targetContentWrapper.classList.remove('expanded');
                 if (targetProgress) targetProgress.classList.remove('expanded');
-            }, 500);
+                contentDiv._isAnimating = false;
+            }, 300);
             return;
         }
 
-        // Clean replacement: Hashes on the left, original text on the right. No random movement.
         const solvedPart = '#'.repeat(solvedIndex);
         const remainPart = originalText.substring(solvedIndex);
 
@@ -104,7 +110,116 @@ function closeThinkingBlock(container) {
         solvedIndex += sweepSpeed;
 
         chatContainer.scrollTop = chatContainer.scrollHeight;
-    }, 30);
+    }, 20);
+}
+
+function openThinkingBlockContent(container) {
+    const contentDiv = container.querySelector('.thinking-content');
+    const targetHeader = container.querySelector('.thinking-header');
+    const targetContentWrapper = container.querySelector('.thinking-content-wrapper');
+    const targetProgress = container.querySelector('.progress-wrapper');
+
+    if (!contentDiv || typeof contentDiv._originalText === 'undefined') return;
+    if (contentDiv._isAnimating) return;
+
+    contentDiv._isAnimating = true;
+
+    // Un-collapse instantly so the matrix sweep animation is visible
+    if (targetHeader) targetHeader.classList.add('expanded');
+    if (targetContentWrapper) targetContentWrapper.classList.add('expanded');
+    if (targetProgress) targetProgress.classList.add('expanded');
+
+    const originalText = contentDiv._originalText;
+    const len = originalText.length;
+    let solvedIndex = 0;
+    const sweepSpeed = Math.max(Math.floor(len / 20), 5);
+
+    const decryptInterval = setInterval(() => {
+        if (solvedIndex >= len) {
+            clearInterval(decryptInterval);
+            contentDiv.textContent = originalText;
+            contentDiv._isAnimating = false;
+            return;
+        }
+
+        const solvedPart = originalText.substring(0, solvedIndex);
+        const remainPart = '#'.repeat(len - solvedIndex);
+
+        contentDiv.textContent = solvedPart + remainPart;
+        solvedIndex += sweepSpeed;
+
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }, 20);
+}
+
+function openThinkingBlock() {
+    if (currentEncryptionDiv) {
+        solveScramble(currentEncryptionDiv);
+        currentEncryptionDiv = null;
+    }
+
+    currentThinkingDiv = document.createElement('div');
+    currentThinkingDiv.className = 'thinking-container';
+
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'thinking-header expanded';
+
+    const progressWrapper = document.createElement('div');
+    progressWrapper.className = 'progress-wrapper expanded';
+    currentProgressBar = document.createElement('div');
+    currentProgressBar.className = 'progress-bar';
+    progressWrapper.appendChild(currentProgressBar);
+
+    const contentWrapper = document.createElement('div');
+    contentWrapper.className = 'thinking-content-wrapper expanded';
+
+    currentThinkingContentDiv = document.createElement('div');
+    currentThinkingContentDiv.className = 'thinking-content';
+
+    contentWrapper.appendChild(currentThinkingContentDiv);
+
+    headerDiv.addEventListener('click', function() {
+        const container = headerDiv.parentElement;
+        const myContentDiv = container.querySelector('.thinking-content');
+
+        // If still generating (no cached text yet), standard CSS toggle
+        if (typeof myContentDiv._originalText === 'undefined') {
+            headerDiv.classList.toggle('expanded');
+            progressWrapper.classList.toggle('expanded');
+            contentWrapper.classList.toggle('expanded');
+            return;
+        }
+
+        // If completed, trigger matrix encryption/decryption animations
+        if (headerDiv.classList.contains('expanded')) {
+            closeThinkingBlock(container);
+        } else {
+            openThinkingBlockContent(container);
+        }
+    });
+
+    currentThinkingDiv.appendChild(headerDiv);
+    currentThinkingDiv.appendChild(progressWrapper);
+    currentThinkingDiv.appendChild(contentWrapper);
+    chatContainer.appendChild(currentThinkingDiv);
+
+    thinkingTokenCount = 0;
+}
+
+// -----------------------------------------------------------
+
+function updateThinkingProgress() {
+    thinkingTokenCount++;
+    let progressPercent = thinkingTokenCount % 100;
+
+    if (progressPercent === 0) {
+        currentProgressBar.style.transition = 'none';
+        currentProgressBar.style.width = '0%';
+        void currentProgressBar.offsetWidth;
+        currentProgressBar.style.transition = 'width 0.1s linear';
+    } else {
+        currentProgressBar.style.width = progressPercent + '%';
+    }
 }
 
 ws.onmessage = function(event) {
@@ -126,76 +241,28 @@ ws.onmessage = function(event) {
         chatContainer.appendChild(div);
 
         currentAgentDiv = null;
-        if (currentProgressBar) currentProgressBar.classList.add('complete');
-        currentThinkingDiv = null;
-
-    } else if (data.type === "agent_thinking_chunk") {
-
-        if (currentEncryptionDiv) {
-            solveScramble(currentEncryptionDiv);
-            currentEncryptionDiv = null;
-        }
-
-        if (!currentThinkingDiv) {
-            currentThinkingDiv = document.createElement('div');
-            currentThinkingDiv.className = 'thinking-container';
-
-            const headerDiv = document.createElement('div');
-            headerDiv.className = 'thinking-header expanded';
-
-            const progressWrapper = document.createElement('div');
-            progressWrapper.className = 'progress-wrapper expanded';
-            currentProgressBar = document.createElement('div');
-            currentProgressBar.className = 'progress-bar';
-            progressWrapper.appendChild(currentProgressBar);
-
-            const contentWrapper = document.createElement('div');
-            contentWrapper.className = 'thinking-content-wrapper expanded';
-
-            currentThinkingContentDiv = document.createElement('div');
-            currentThinkingContentDiv.className = 'thinking-content';
-
-            contentWrapper.appendChild(currentThinkingContentDiv);
-
-            headerDiv.addEventListener('click', () => {
-                headerDiv.classList.toggle('expanded');
-                progressWrapper.classList.toggle('expanded');
-                contentWrapper.classList.toggle('expanded');
-            });
-
-            currentThinkingDiv.appendChild(headerDiv);
-            currentThinkingDiv.appendChild(progressWrapper);
-            currentThinkingDiv.appendChild(contentWrapper);
-            chatContainer.appendChild(currentThinkingDiv);
-
-            thinkingTokenCount = 0;
-        }
-
-        currentThinkingContentDiv.textContent += data.content;
-
-        thinkingTokenCount++;
-        let progressPercent = thinkingTokenCount % 100;
-
-        if (progressPercent === 0) {
-            currentProgressBar.style.transition = 'none';
-            currentProgressBar.style.width = '0%';
-            void currentProgressBar.offsetWidth;
-            currentProgressBar.style.transition = 'width 0.1s linear';
-        } else {
-            currentProgressBar.style.width = progressPercent + '%';
-        }
-
-    } else if (data.type === "agent_chunk") {
-
-        if (currentEncryptionDiv) {
-            solveScramble(currentEncryptionDiv);
-            currentEncryptionDiv = null;
-        }
 
         if (currentProgressBar && !currentProgressBar.classList.contains('complete')) {
             currentProgressBar.classList.add('complete');
-            // Trigger the massive block encrypt animation
+            if (currentThinkingDiv) closeThinkingBlock(currentThinkingDiv);
+        }
+
+        currentThinkingDiv = null;
+        currentProgressBar = null;
+
+    } else if (data.type === "agent_thinking_chunk") {
+
+        if (!currentThinkingDiv) openThinkingBlock();
+        currentThinkingContentDiv.textContent += data.content;
+        updateThinkingProgress();
+
+    } else if (data.type === "agent_chunk") {
+
+        if (currentProgressBar && !currentProgressBar.classList.contains('complete')) {
+            currentProgressBar.classList.add('complete');
             closeThinkingBlock(currentThinkingDiv);
+            currentThinkingDiv = null;
+            currentProgressBar = null;
         }
 
         if (!currentAgentDiv) {
@@ -212,8 +279,14 @@ ws.onmessage = function(event) {
         chatContainer.appendChild(div);
 
     } else if (data.type === "done") {
+        if (currentProgressBar && !currentProgressBar.classList.contains('complete')) {
+            currentProgressBar.classList.add('complete');
+            if (currentThinkingDiv) closeThinkingBlock(currentThinkingDiv);
+        }
+
         currentAgentDiv = null;
         currentThinkingDiv = null;
+        currentProgressBar = null;
         userInput.disabled = false;
         userInput.focus();
     }

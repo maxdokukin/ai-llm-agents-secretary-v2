@@ -161,12 +161,12 @@ body {
 }
 
 .thinking-header::before {
-    content: "[+] DECRYPTING LOGIC PROTOCOLS...";
+    content: "[+] ENCRYPTED THOUGHT STREAM:";
     margin-right: 10px;
 }
 
 .thinking-header.expanded::before {
-    content: "[-] ENCRYPTED THOUGHT STREAM:";
+    content: "[-] DECRYPTING THOUGHT STREAM:";
     color: #008F11;
 }
 
