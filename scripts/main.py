@@ -26,6 +26,7 @@ from src.ToolManager.ToolManager import ToolManager
 
 CTX_SERVER = "http://localhost:7999/api/context"
 LLM_SERVER = "http://localhost:8080/v1"
+# LLM_SERVER = "http://10.0.0.43:8080/v1"
 
 # --- Sample Data Index ---
 from src.data.supabase import fetch_db_index
@@ -144,7 +145,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         continue
 
                     # --- RAW DEBUG PRINT ---
-                    print(f"DEBUG RAW CHUNK: {chunk}")
+                    # print(f"DEBUG RAW CHUNK: {chunk}")
 
                     delta = chunk.choices[0].delta
 

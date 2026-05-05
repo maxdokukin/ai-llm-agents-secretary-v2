@@ -11,8 +11,8 @@ from src.ToolManager.ToolManager import ToolManager
 from src.data.supabase import fetch_db_index
 
 CTX_SERVER = "http://localhost:7999/api/context"
-# LLM_SERVER = "http://localhost:8080/v1"
-LLM_SERVER = "http://10.0.0.43:8080/v1"
+LLM_SERVER = "http://localhost:8080/v1"
+# LLM_SERVER = "http://10.0.0.43:8080/v1"
 
 def tool_returns_data(t_manager: ToolManager, tool_name: str) -> bool:
     """Returns whether a registered tool is a data-returning tool."""
@@ -256,7 +256,7 @@ if __name__ == "__main__":
     # Specify your CSV names here
     INPUT_CSV = "/Users/max/Codebase/github/ai-llm-agents-secretary-v2/data/test_queries.csv"
     # OUTPUT_CSV = "/Users/max/Codebase/github/ai-llm-agents-secretary-v2/data/test_queries_results_e4b.csv"
-    OUTPUT_CSV = "/Users/max/Codebase/github/ai-llm-agents-secretary-v2/data/test_queries_results_26b.csv"
+    OUTPUT_CSV = "/Users/max/Codebase/github/ai-llm-agents-secretary-v2/data/test_queries_results_e4b.csv"
 
     # Specify the name of the column that contains the prompt/query
     QUERY_COLUMN = "query"
