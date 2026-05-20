@@ -7,7 +7,7 @@ from typing import Any, Dict, Iterable, List, Sequence, Tuple
 
 # Writes to ../data/synthetic_data.sqlite relative to this script by default.
 # Override with SQLITE_DB_PATH=/absolute/path/synthetic_data.sqlite if needed.
-DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent / "data" / "synthetic_data.sqlite"
+DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent / "data" / "test" / "synthetic_data.sqlite"
 
 
 SCHEMA: Dict[str, List[Tuple[str, str]]] = {
